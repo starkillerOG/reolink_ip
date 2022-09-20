@@ -1,0 +1,33 @@
+[project]
+name            = "reolink-ip"
+version         = "0.0.22"
+description     = "Reolink IP NVR/camera API"
+readme          = "README.md"
+license         = { file="LICENSE" }
+authors         = [
+  { name="JimStar", email="bubukis@gmail.com" }
+]
+requires-python = ">=3.9"
+dependencies    = [
+    "ffmpeg",
+    "requests",
+    "aiohttp"
+]
+classifiers     = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Build Tools",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3.9",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+keywords        = ['Reolink', 'API', 'camera', 'NVR', 'CCTV', 'Home-Assistant', 'Home Assistant', 'Smart Home']
+
+[project.urls]
+homepage        = "https://github.com/JimStar/reolink_ip"
+repository      = "https://github.com/JimStar/reolink_ip/releases/latest"
+
+[build-system]
+requires        = ["setuptools>=40.8.0", "wheel"]
+build-backend   = "setuptools.build_meta:__legacy__"
