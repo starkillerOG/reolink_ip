@@ -72,6 +72,7 @@ class Host:
         self._url: str                      = ""
         self._use_https: bool               = use_https
         self._host: str                     = host
+        self._external_host: Optional[str]  = None
         self._port: int                     = port
         self._rtsp_port: Optional[int]      = None
         self._rtmp_port: Optional[int]      = None
@@ -198,6 +199,14 @@ class Host:
     @property
     def host(self) -> str:
         return self._host
+
+    @property
+    def external_host(self) -> Optional[str]:
+        return self._external_host
+
+    @external_host.setter
+    def external_host(self, value: Optional[str]):
+        self._external_host = value
 
     @property
     def port(self) -> int:
@@ -1035,29 +1044,41 @@ class Host:
     #endof get_stream_source()
 
 
-    async def get_vod_source(self, channel: int, filename: str) -> tuple[Optional[str], Optional[str]]:
+    async def get_vod_source(self, channel: int, filename: str, external_url: bool = False) -> tuple[Optional[str], Optional[str]]:
         """Return the VOD source url."""
         if channel not in self._channels:
             return None, None
         if not await self.login():
             return None, None
 
+        host_url: str = None
+        if external_url and self._external_host:
+            host_url = self._external_host
+        else:
+            host_url = self._host
+
         if self._is_nvr:
             # NVR VoDs "type=0": Adobe flv
-            #return "video/x-flv", f"http://{self._host}:{self._port}/flv?port=1935&app=bcs&stream=playback.bcs&channel={channel}&type=0&start={filename}&seek=0&user={self._username}&password={self._password}"
+            #return "video/x-flv", f"http://{host_url}:{self._port}/flv?port=1935&app=bcs&stream=playback.bcs&channel={channel}&type=0&start={filename}&seek=0&user={self._username}&password={self._password}"
             # NVR VoDs "type=1": mp4
-            # return "video/mp4", f"http://{self._host}:{self._port}/flv?port=1935&app=bcs&stream=playback.bcs&channel={channel}&type=1&start={filename}&seek=0&user={self._username}&password={self._password}"
+            # return "video/mp4", f"http://{host_url}:{self._port}/flv?port=1935&app=bcs&stream=playback.bcs&channel={channel}&type=1&start={filename}&seek=0&user={self._username}&password={self._password}"
             if self._use_https:
-                return "application/x-mpegURL", f"https://{self._host}:{self._port}/flv?port=1935&app=bcs&stream=playback.bcs&channel={channel}&type=1&start={filename}&seek=0&user={self._username}&password={self._password}"
+                return "application/x-mpegURL", f"https://{host_url}:{self._port}/flv?port=1935&app=bcs&stream=playback.bcs&channel={channel}&type=1&start={filename}&seek=0&user={self._username}&password={self._password}"
             else:
-                return "application/x-mpegURL", f"http://{self._host}:{self._port}/flv?port=1935&app=bcs&stream=playback.bcs&channel={channel}&type=1&start={filename}&seek=0&user={self._username}&password={self._password}"
+                return "application/x-mpegURL", f"http://{host_url}:{self._port}/flv?port=1935&app=bcs&stream=playback.bcs&channel={channel}&type=1&start={filename}&seek=0&user={self._username}&password={self._password}"
         else:
-            # Reolink uses an odd encoding, if the camera provides a / in the filename it needs to be encoded with %20
-            # Camera VoDs are only available over rtmp, rtsp is not an option
-            file = filename.replace('/', '%20')
-            # Looks like it only works with login/password method
-            # return f"rtmp://{self._host}:{self._rtmp_port}/vod/{file}?channel={channel}&stream=0&token={self._token}"
-            return "application/x-mpegURL", f"rtmp://{self._host}:{self._rtmp_port}/vod/{file}?channel={channel}&stream=0&user={self._username}&password={self._password}"
+            if external_url:
+                if self._use_https:
+                    return "application/x-mpegURL", f"https://{host_url}:{self._port}/cgi-bin/api.cgi?&cmd=Playback&channel={channel}&source={filename}&user={self._username}&password={self._password}"
+                else:
+                    return "application/x-mpegURL", f"http://{host_url}:{self._port}/cgi-bin/api.cgi?&cmd=Playback&channel={channel}&source={filename}&user={self._username}&password={self._password}"
+            else:
+                # Reolink uses an odd encoding, if the camera provides a / in the filename it needs to be encoded with %20
+                # Camera VoDs are only available over rtmp, rtsp is not an option
+                file = filename.replace('/', '%20')
+                # Looks like it only works with login/password method
+                # return f"rtmp://{self._host}:{self._rtmp_port}/vod/{file}?channel={channel}&stream=0&token={self._token}"
+                return "application/x-mpegURL", f"rtmp://{self._host}:{self._rtmp_port}/vod/{file}?channel={channel}&stream=0&user={self._username}&password={self._password}"
     #endof get_vod_source()
 
 
