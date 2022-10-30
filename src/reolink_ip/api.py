@@ -73,6 +73,7 @@ class Host:
         self._use_https: bool               = use_https
         self._host: str                     = host
         self._external_host: Optional[str]  = None
+        self._external_port: Optional[str]  = None
         self._port: int                     = port
         self._rtsp_port: Optional[int]      = None
         self._rtmp_port: Optional[int]      = None
@@ -207,6 +208,14 @@ class Host:
     @external_host.setter
     def external_host(self, value: Optional[str]):
         self._external_host = value
+
+    @property
+    def external_port(self) -> Optional[str]:
+        return self._external_port
+
+    @external_port.setter
+    def external_port(self, value: Optional[str]):
+        self._external_port = value
 
     @property
     def port(self) -> int:
@@ -1057,21 +1066,27 @@ class Host:
         else:
             host_url = self._host
 
+        host_port: str = None
+        if external_url and self._external_port:
+            host_port = self._external_port
+        else:
+            host_port = self._port
+
         if self._is_nvr:
             # NVR VoDs "type=0": Adobe flv
-            #return "video/x-flv", f"http://{host_url}:{self._port}/flv?port=1935&app=bcs&stream=playback.bcs&channel={channel}&type=0&start={filename}&seek=0&user={self._username}&password={self._password}"
+            #return "video/x-flv", f"http://{host_url}:{host_port}/flv?port=1935&app=bcs&stream=playback.bcs&channel={channel}&type=0&start={filename}&seek=0&user={self._username}&password={self._password}"
             # NVR VoDs "type=1": mp4
-            # return "video/mp4", f"http://{host_url}:{self._port}/flv?port=1935&app=bcs&stream=playback.bcs&channel={channel}&type=1&start={filename}&seek=0&user={self._username}&password={self._password}"
+            # return "video/mp4", f"http://{host_url}:{host_port}/flv?port=1935&app=bcs&stream=playback.bcs&channel={channel}&type=1&start={filename}&seek=0&user={self._username}&password={self._password}"
             if self._use_https:
-                return "application/x-mpegURL", f"https://{host_url}:{self._port}/flv?port=1935&app=bcs&stream=playback.bcs&channel={channel}&type=1&start={filename}&seek=0&user={self._username}&password={self._password}"
+                return "application/x-mpegURL", f"https://{host_url}:{host_port}/flv?port=1935&app=bcs&stream=playback.bcs&channel={channel}&type=1&start={filename}&seek=0&user={self._username}&password={self._password}"
             else:
-                return "application/x-mpegURL", f"http://{host_url}:{self._port}/flv?port=1935&app=bcs&stream=playback.bcs&channel={channel}&type=1&start={filename}&seek=0&user={self._username}&password={self._password}"
+                return "application/x-mpegURL", f"http://{host_url}:{host_port}/flv?port=1935&app=bcs&stream=playback.bcs&channel={channel}&type=1&start={filename}&seek=0&user={self._username}&password={self._password}"
         else:
             if external_url:
                 if self._use_https:
-                    return "application/x-mpegURL", f"https://{host_url}:{self._port}/cgi-bin/api.cgi?&cmd=Playback&channel={channel}&source={filename}&user={self._username}&password={self._password}"
+                    return "application/x-mpegURL", f"https://{host_url}:{host_port}/cgi-bin/api.cgi?&cmd=Playback&channel={channel}&source={filename}&user={self._username}&password={self._password}"
                 else:
-                    return "application/x-mpegURL", f"http://{host_url}:{self._port}/cgi-bin/api.cgi?&cmd=Playback&channel={channel}&source={filename}&user={self._username}&password={self._password}"
+                    return "application/x-mpegURL", f"http://{host_url}:{host_port}/cgi-bin/api.cgi?&cmd=Playback&channel={channel}&source={filename}&user={self._username}&password={self._password}"
             else:
                 # Reolink uses an odd encoding, if the camera provides a / in the filename it needs to be encoded with %20
                 # Camera VoDs are only available over rtmp, rtsp is not an option
