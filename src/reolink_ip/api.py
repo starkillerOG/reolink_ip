@@ -35,6 +35,7 @@ FACE_DETECTION_TYPE     = "face"
 PERSON_DETECTION_TYPE   = "person"
 VEHICLE_DETECTION_TYPE  = "vehicle"
 PET_DETECTION_TYPE      = "pet"
+VISITOR_DETECTION_TYPE  = "visitor"
 
 _LOGGER         = logging.getLogger(__name__)
 _LOGGER_DATA    = logging.getLogger(__name__+".data")
@@ -155,6 +156,7 @@ class Host:
         # States
         self._motion_detection_states: dict[int, bool]  = dict()
         self._is_ia_enabled: dict[int, bool]            = dict()
+        self._is_doorbell_enabled: dict[int, bool]      = dict()
 
         ##############################################################################
         # Camera-level states
@@ -507,6 +509,12 @@ class Host:
         """Wether or not the camera supports AI objects detection"""
         return self._is_ia_enabled is not None and channel in self._is_ia_enabled and self._is_ia_enabled[channel]
     #endof is_ia_enabled()
+
+
+    def is_doorbell_enabled(self, channel: int) -> bool:
+        """Wether or not the camera supports doorbell"""
+        return self._is_doorbell_enabled is not None and channel in self._is_doorbell_enabled and self._is_doorbell_enabled[channel]
+    #endof is_doorbell_enabled()
 
 
     def enable_https(self, enable: bool):
@@ -1110,9 +1118,17 @@ class Host:
                     self._nvr_serial = devInfo["serial"]
                     self._nvr_name = devInfo["name"]
                     self._nvr_sw_version = devInfo["firmVer"]
-                    self._nvr_model = devInfo["model"]
+                    self._nvr_model: str = devInfo["model"]
                     self._nvr_num_channels = devInfo["channelNum"]
                     self._nvr_sw_version_object = SoftwareVersion(self._nvr_sw_version)
+                    # Normally needs to be channel-specific, but there are no such "abilities" in channel-abilities response.
+                    # Thus let it be here so far, before Reolink clarifies its mess with "doorbell" ability and its NVR-notifications.
+                    if "Doorbell" in self._nvr_model:
+                        for channel in self._channels:
+                            self._is_doorbell_enabled[channel] = True
+                    else:
+                        for channel in self._channels:
+                            self._is_doorbell_enabled[channel] = False
 
                 elif data["cmd"] == "GetHddInfo":
                     self._hdd_info = data["value"]["HddInfo"]
