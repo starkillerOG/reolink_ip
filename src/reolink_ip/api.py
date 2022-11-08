@@ -595,7 +595,7 @@ class Host:
 
 
     async def logout(self, mutex_owned = False):
-        body  = [{"cmd": "Logout", "action": 0, "param": {"User": {"userName": self._username, "password": self._password}}}]
+        body  = [{"cmd": "Logout", "action": 0, "param": {}}]
 
         if not mutex_owned:
             await self._login_mutex.acquire()
@@ -604,9 +604,16 @@ class Host:
             if self._token:
                 param = {"cmd": "Logout", "token": self._token}
                 await self.send(body, param)
-            else:
-                param = {"cmd": "Logout"}
-                await self.send(body, param)
+            # Reolink has a bug in some cameras' firmware: the Logout command issued without a token breaks the subsequent commands:
+            # even if Login command issued AFTER that successfully returns a token, any command with that token would return "Please login first" error.
+            # Thus it is not available for now to exit the previous "stuck" sessions after sudden crash or power failure:
+            # Reolink has restricted amount of sessions on a device, so in such case the component would not be able to login
+            # into a device before some previos session expires an hour later...
+            # If Reolink fixes this and makes Logout work with login/pass pair instead of a token - this can be uncommented... 
+            # else:
+            #     body  = [{"cmd": "Logout", "action": 0, "param": {"User": {"userName": self._username, "password": self._password}}}]
+            #     param = {"cmd": "Logout"}
+            #     await self.send(body, param)
 
             self.clear_token()
             if self._aiohttp_session is not None:
