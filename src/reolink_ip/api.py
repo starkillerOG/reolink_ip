@@ -6,6 +6,7 @@ import traceback
 import base64
 import hashlib
 import uuid
+import ssl
 
 from datetime           import datetime, timedelta
 from typing             import Optional, Any
@@ -42,6 +43,11 @@ _LOGGER_DATA    = logging.getLogger(__name__+".data")
 
 #ref_sw_version_3_0_0_0_0 = SoftwareVersion("v3.0.0.0_0")
 #ref_sw_version_3_1_0_0_0 = SoftwareVersion("v3.1.0.0_0")
+
+SSL_CONTEXT=ssl.create_default_context()
+SSL_CONTEXT.set_ciphers("DEFAULT")
+SSL_CONTEXT.check_hostname = False
+SSL_CONTEXT.verify_mode = ssl.CERT_NONE
 
 
 ##########################################################################################################################################################
@@ -93,7 +99,7 @@ class Host:
             self._aiohttp_get_session_callback = aiohttp_get_session_callback
             self._aiohttp_session: Optional[aiohttp.ClientSession] = None
         else:
-            self._aiohttp_session: Optional[aiohttp.ClientSession] = aiohttp.ClientSession(timeout = self._timeout, connector = aiohttp.TCPConnector(ssl = False))
+            self._aiohttp_session: Optional[aiohttp.ClientSession] = aiohttp.ClientSession(timeout = self._timeout, connector = aiohttp.TCPConnector(ssl = SSL_CONTEXT))
             self._aiohttp_get_session_callback = None
 
         ##############################################################################
@@ -2101,7 +2107,7 @@ class Host:
         """Generic send method."""
 
         if self._aiohttp_session is not None and self._aiohttp_session.closed:
-            self._aiohttp_session = aiohttp.ClientSession(timeout=self._timeout, connector=aiohttp.TCPConnector(ssl=False))
+            self._aiohttp_session = aiohttp.ClientSession(timeout=self._timeout, connector=aiohttp.TCPConnector(ssl=SSL_CONTEXT))
 
         if (body is None or (body[0]["cmd"] != "Login" and body[0]["cmd"] != "Logout")):
             if not await self.login():
