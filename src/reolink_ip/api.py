@@ -696,54 +696,54 @@ class Host:
         body            = None
 
         if cmd == "GetEnc":
-            body = [{"cmd": "GetEnc", "action": 1, "param": channels_param}]
+            body = [{"cmd": "GetEnc", "action": 0, "param": channels_param}]
         elif cmd == "GetIsp":
-            body = [{"cmd": "GetIsp", "action": 1, "param": channels_param}]
+            body = [{"cmd": "GetIsp", "action": 0, "param": channels_param}]
         elif cmd == "GetIrLights":
-            body = [{"cmd": "GetIrLights", "action": 1, "param": channels_param}]
+            body = [{"cmd": "GetIrLights", "action": 0, "param": channels_param}]
         elif cmd == "GetWhiteLed":
             body = [{"cmd": "GetWhiteLed", "action": 0, "param": channels_param}]
         elif cmd == "GetPtzPreset":
-            body = [{"cmd": "GetPtzPreset", "action": 1, "param": channels_param}]
+            body = [{"cmd": "GetPtzPreset", "action": 0, "param": channels_param}]
         elif cmd == "GetAutoFocus":
             body = [{"cmd": "GetAutoFocus", "action": 0, "param": channels_param}]
         elif cmd == "GetZoomFocus":
             body = [{"cmd": "GetZoomFocus", "action": 0, "param": channels_param}]
         elif cmd == "GetOsd":
-            body = [{"cmd": "GetOsd", "action": 1, "param": channels_param}]
+            body = [{"cmd": "GetOsd", "action": 0, "param": channels_param}]
         elif cmd == "GetAlarm":
             body = [
                 {
                     "cmd": "GetAlarm",
-                    "action": 1,
+                    "action": 0,
                     "param": {"Alarm": alarm_param},
                 }
             ]
         elif cmd == "GetEmail" or cmd == "GetEmailV20":
             if self._api_version_getemail == 0:
-                body = [{"cmd": "GetEmail", "action": 1, "param": channels_param}]
+                body = [{"cmd": "GetEmail", "action": 0, "param": channels_param}]
             else:
-                body = [{"cmd": "GetEmailV20", "action": 1, "param": channels_param}]
+                body = [{"cmd": "GetEmailV20", "action": 0, "param": channels_param}]
         elif cmd == "GetPush" or cmd == "GetPushV20":
             if self._api_version_getpush == 0:
-                body = [{"cmd": "GetPush", "action": 1, "param": channels_param}]
+                body = [{"cmd": "GetPush", "action": 0, "param": channels_param}]
             else:
-                body = [{"cmd": "GetPushV20", "action": 1, "param": channels_param}]
+                body = [{"cmd": "GetPushV20", "action": 0, "param": channels_param}]
         elif cmd == "GetFtp" or cmd == "GetFtpV20":
             if self._api_version_getftp == 0:
-                body = [{"cmd": "GetFtp", "action": 1, "param": channels_param}]
+                body = [{"cmd": "GetFtp", "action": 0, "param": channels_param}]
             else:
-                body = [{"cmd": "GetFtpV20", "action": 1, "param": channels_param}]
+                body = [{"cmd": "GetFtpV20", "action": 0, "param": channels_param}]
         elif cmd == "GetRec" or cmd == "GetRecV20":
             if self._api_version_getrec == 0:
-                body = [{"cmd": "GetRec", "action": 1, "param": channels_param}]
+                body = [{"cmd": "GetRec", "action": 0, "param": channels_param}]
             else:
-                body = [{"cmd": "GetRecV20", "action": 1, "param": channels_param}]
+                body = [{"cmd": "GetRecV20", "action": 0, "param": channels_param}]
         elif cmd == "GetAudioAlarm" or cmd == "GetAudioAlarmV20":
             if self._api_version_getalarm == 0:
-                body = [{"cmd": "GetAudioAlarm", "action": 1, "param": channels_param}]
+                body = [{"cmd": "GetAudioAlarm", "action": 0, "param": channels_param}]
             else:
-                body = [{"cmd": "GetAudioAlarmV20", "action": 1, "param": channels_param}]
+                body = [{"cmd": "GetAudioAlarmV20", "action": 0, "param": channels_param}]
 
         if body is not None:
             for c in self._channels:
@@ -771,45 +771,45 @@ class Host:
         channels_param  = {"channel": 0}
 
         body = [
-            {"cmd": "GetEnc", "action": 1, "param": channels_param},
-            {"cmd": "GetIsp", "action": 1, "param": channels_param},
-            {"cmd": "GetIrLights", "action": 1, "param": channels_param},
+            {"cmd": "GetEnc", "action": 0, "param": channels_param},
+            {"cmd": "GetIsp", "action": 0, "param": channels_param},
+            {"cmd": "GetIrLights", "action": 0, "param": channels_param},
             {"cmd": "GetWhiteLed", "action": 0, "param": channels_param},
-            {"cmd": "GetPtzPreset", "action": 1, "param": channels_param},
+            {"cmd": "GetPtzPreset", "action": 0, "param": channels_param},
             {"cmd": "GetAutoFocus", "action": 0, "param": channels_param},
             {"cmd": "GetZoomFocus", "action": 0, "param": channels_param},
-            {"cmd": "GetOsd", "action": 1, "param": channels_param},
+            {"cmd": "GetOsd", "action": 0, "param": channels_param},
             {
                 "cmd": "GetAlarm",
-                "action": 1,
+                "action": 0,
                 "param": {"Alarm": alarm_param},
             }
         ]
 
         if self._api_version_getemail >= 1:
-            body.append({"cmd": "GetEmailV20", "action": 1, "param": channels_param})
+            body.append({"cmd": "GetEmailV20", "action": 0, "param": channels_param})
         else:
-            body.append({"cmd": "GetEmail", "action": 1, "param": channels_param})
+            body.append({"cmd": "GetEmail", "action": 0, "param": channels_param})
 
         if self._api_version_getpush >= 1:
-            body.append({"cmd": "GetPushV20", "action": 1, "param": channels_param})
+            body.append({"cmd": "GetPushV20", "action": 0, "param": channels_param})
         else:
-            body.append({"cmd": "GetPush", "action": 1, "param": channels_param})
+            body.append({"cmd": "GetPush", "action": 0, "param": channels_param})
 
         if self._api_version_getftp >= 1:
-            body.append({"cmd": "GetFtpV20", "action": 1, "param": channels_param})
+            body.append({"cmd": "GetFtpV20", "action": 0, "param": channels_param})
         else:
-            body.append({"cmd": "GetFtp", "action": 1, "param": channels_param})
+            body.append({"cmd": "GetFtp", "action": 0, "param": channels_param})
 
         if self._api_version_getrec >= 1:
-            body.append({"cmd": "GetRecV20", "action": 1, "param": channels_param})
+            body.append({"cmd": "GetRecV20", "action": 0, "param": channels_param})
         else:
-            body.append({"cmd": "GetRec", "action": 1, "param": channels_param})
+            body.append({"cmd": "GetRec", "action": 0, "param": channels_param})
 
         if self._api_version_getalarm >= 1:
-            body.append({"cmd": "GetAudioAlarmV20", "action": 1, "param": channels_param})
+            body.append({"cmd": "GetAudioAlarmV20", "action": 0, "param": channels_param})
         else:
-            body.append({"cmd": "GetAudioAlarm", "action": 1, "param": channels_param})
+            body.append({"cmd": "GetAudioAlarm", "action": 0, "param": channels_param})
 
         for c in self._channels:
             alarm_param["channel"]      = c
@@ -834,16 +834,16 @@ class Host:
     async def get_host_data(self) -> bool:
         """Fetch the host settings/capabilities."""
         body = [
-            {"cmd": "GetDevInfo", "action": 1, "param": {}},
-            {"cmd": "GetLocalLink", "action": 1, "param": {}},
-            {"cmd": "GetNetPort", "action": 1, "param": {}},
-            {"cmd": "GetHddInfo", "action": 1, "param": {}},
-            {"cmd": "GetUser", "action": 1, "param": {}},
+            {"cmd": "GetDevInfo", "action": 0, "param": {}},
+            {"cmd": "GetLocalLink", "action": 0, "param": {}},
+            {"cmd": "GetNetPort", "action": 0, "param": {}},
+            {"cmd": "GetHddInfo", "action": 0, "param": {}},
+            {"cmd": "GetUser", "action": 0, "param": {}},
             {"cmd": "GetNtp", "action": 0, "param": {}},
             {"cmd": "GetTime", "action": 0, "param": {}},
             {
                 "cmd": "GetAbility",
-                "action": 1,
+                "action": 0,
                 "param": {"User": {"userName": self._username}},
             }
         ]
@@ -867,15 +867,15 @@ class Host:
         ]
         # checking API versions (because Reolink dev quality sucks big time we cannot fully trust GetAbility)
         if self._api_version_getemail >= 1:
-            channel_level_body.append({"cmd": "GetEmailV20", "action": 1, "param": channels_param})
+            channel_level_body.append({"cmd": "GetEmailV20", "action": 0, "param": channels_param})
         if self._api_version_getpush >= 1:
-            channel_level_body.append({"cmd": "GetPushV20", "action": 1, "param": channels_param})
+            channel_level_body.append({"cmd": "GetPushV20", "action": 0, "param": channels_param})
         if self._api_version_getftp >= 1:
-            channel_level_body.append({"cmd": "GetFtpV20", "action": 1, "param": channels_param})
+            channel_level_body.append({"cmd": "GetFtpV20", "action": 0, "param": channels_param})
         if self._api_version_getrec >= 1:
-            channel_level_body.append({"cmd": "GetRecV20", "action": 1, "param": channels_param})
+            channel_level_body.append({"cmd": "GetRecV20", "action": 0, "param": channels_param})
         if self._api_version_getalarm >= 1:
-            channel_level_body.append({"cmd": "GetAudioAlarmV20", "action": 1, "param": channels_param})
+            channel_level_body.append({"cmd": "GetAudioAlarmV20", "action": 0, "param": channels_param})
 
         versions_check = True
         for c in self._channels:
@@ -1743,8 +1743,8 @@ class Host:
             return False
 
         body = [
-            {'cmd': 'SetWhiteLed',
-                'param': {'WhiteLed': {'state': 1 if enable else 0, 'channel': channel, 'mode': mode, 'bright': brightness}}
+            {"cmd": "SetWhiteLed",
+                "param": {"WhiteLed": {"state": 1 if enable else 0, "channel": channel, "mode": mode, "bright": brightness}}
             }
         ]
 
@@ -1809,9 +1809,9 @@ class Host:
             return False
 
         if self._api_version_getalarm == 0:
-            body = [{'cmd': 'SetAudioAlarm', 'param': {"Audio": {"schedule": {"enable": 1 if enable else 0, "channel": channel}}}}]
+            body = [{"cmd": "SetAudioAlarm", "param": {"Audio": {"schedule": {"enable": 1 if enable else 0, "channel": channel}}}}]
         else:
-            body = [{'cmd': 'SetAudioAlarmV20', 'param': {"Audio": {"enable": 1 if enable else 0, "channel": channel}}}]
+            body = [{"cmd": "SetAudioAlarmV20", "param": {"Audio": {"enable": 1 if enable else 0, "channel": channel}}}]
 
         return await self.send_setting(body)
     #enfof set_audio_alarm()
@@ -1829,12 +1829,12 @@ class Host:
             return False
 
         body = [
-            {'cmd': 'AudioAlarmPlay',
-                'action': 0,
-                'param': {
-                    "alarm_mode": 'manual',
-                    'manual_switch': 1 if enable else 0,
-                    'times': 2,
+            {"cmd": "AudioAlarmPlay",
+                "action": 0,
+                "param": {
+                    "alarm_mode": "manual",
+                    "manual_switch": 1 if enable else 0,
+                    "times": 2,
                     "channel": channel
                 }
             }
@@ -1946,7 +1946,7 @@ class Host:
         body = [
             {
                 "cmd": "SetAlarm",
-                "action": 1,
+                "action": 0,
                 "param": {
                     "Alarm": {
                         "channel": channel,
