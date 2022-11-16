@@ -1042,11 +1042,16 @@ class Host:
         if channel not in self._channels:
             return None
 
+        stream_type = None
+        if self._stream == "sub":
+            stream_type = 1
+        else:
+            stream_type = 0
         if self._rtmp_auth_method == DEFAULT_RTMP_AUTH_METHOD:
             password = parse.quote(self._password)
-            return f"rtmp://{self._host}:{self._rtmp_port}/bcs/channel{channel}_{self._stream}.bcs?channel={channel}&stream=0&user={self._username}&password={password}"
+            return f"rtmp://{self._host}:{self._rtmp_port}/bcs/channel{channel}_{self._stream}.bcs?channel={channel}&stream={stream_type}&user={self._username}&password={password}"
 
-        return f"rtmp://{self._host}:{self._rtmp_port}/bcs/channel{channel}_{self._stream}.bcs?channel={channel}&stream=0&token={self._token}"
+        return f"rtmp://{self._host}:{self._rtmp_port}/bcs/channel{channel}_{self._stream}.bcs?channel={channel}&stream={stream_type}&token={self._token}"
     #endof get_rtmp_stream_source()
 
 
@@ -1109,12 +1114,17 @@ class Host:
                 else:
                     return "application/x-mpegURL", f"http://{host_url}:{host_port}/cgi-bin/api.cgi?&cmd=Playback&channel={channel}&source={filename}&user={self._username}&password={self._password}"
             else:
+                stream_type = None
+                if self._stream == "sub":
+                    stream_type = 1
+                else:
+                    stream_type = 0
                 # Reolink uses an odd encoding, if the camera provides a / in the filename it needs to be encoded with %20
                 # Camera VoDs are only available over rtmp, rtsp is not an option
                 file = filename.replace('/', '%20')
                 # Looks like it only works with login/password method
-                # return f"rtmp://{self._host}:{self._rtmp_port}/vod/{file}?channel={channel}&stream=0&token={self._token}"
-                return "application/x-mpegURL", f"rtmp://{self._host}:{self._rtmp_port}/vod/{file}?channel={channel}&stream=0&user={self._username}&password={self._password}"
+                # return f"rtmp://{self._host}:{self._rtmp_port}/vod/{file}?channel={channel}&stream={stream_type}&token={self._token}"
+                return "application/x-mpegURL", f"rtmp://{self._host}:{self._rtmp_port}/vod/{file}?channel={channel}&stream={stream_type}&user={self._username}&password={self._password}"
     #endof get_vod_source()
 
 
