@@ -1748,7 +1748,7 @@ class Host:
 
         if mode is None:
             mode = 1
-        if (brightness < 0 or brightness > 100 or (not (mode == 0 or mode == 1 or mode == 2))):
+        if (brightness < 0 or brightness > 100 or (not (mode == 0 or mode == 1 or mode == 3))):
             _LOGGER.error("Incorrect parameters supplied to \"set whiteLed\": brightness = %s\n mode = %s", brightness, mode)
             return False
 
@@ -1785,7 +1785,7 @@ class Host:
              "param": {
                  "WhiteLed": {
                      "LightingSchedule": {
-                         "EndHour": endhour, "EndMin": endmin, "StartHour": starthour, "StartMin": startmin},"channel": channel, "mode": 2
+                         "EndHour": endhour, "EndMin": endmin, "StartHour": starthour, "StartMin": startmin},"channel": channel, "mode": 3
                  }
              }
              }
@@ -1800,7 +1800,7 @@ class Host:
         if enable:
             if not await self.set_spotlight_lighting_schedule(channel, 23, 59, 0, 0):
                 return False
-            return await self.set_whiteled(channel, enable, 100, 2)
+            return await self.set_whiteled(channel, enable, 100, 3)
         else:
             if not await self.set_spotlight_lighting_schedule(channel, 0, 0, 0, 0):
                 return False
