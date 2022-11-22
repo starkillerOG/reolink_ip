@@ -112,9 +112,9 @@ class Host:
 
         ##############################################################################
         # Channels of cameras, used in this NVR ([0] for a directly connected camera)
-        self._channels: list[int]           = []
-        self._channel_names: dict[int, str] = dict()
-        self._channel_models: dict[int, str] = dict()
+        self._channels: list[int]               = []
+        self._channel_names: dict[int, str]     = dict()
+        self._channel_models: dict[int, str]    = dict()
 
         ##############################################################################
         # Video-stream formats
@@ -1147,14 +1147,23 @@ class Host:
                     self._nvr_sw_version_object = SoftwareVersion(self._nvr_sw_version)
 
                 elif data["cmd"] == "GetChannelstatus":
+                    # Maybe later add a support of dynamic cameras' connect/disconnect, without API consumer re-init.
+                    # A callback from here to the API consumer would be needed I think if changes are seen.
                     if self._nvr_num_channels == 0:
                         self._nvr_num_channels = data["value"]["count"]
-                    for chInfo in data["value"]["status"]:
-                        self._channel_names[chInfo["channel"]] = chInfo["name"]
-                        self._channel_models[chInfo["channel"]] = chInfo["typeInfo"]
-                        self._is_doorbell_enabled[chInfo["channel"]] = "Doorbell" in chInfo["typeInfo"]
-                        if chInfo["online"] == 1 and chInfo["channel"] not in self._channels:
-                            self._channels.append(chInfo["channel"])
+                        
+                        for chInfo in data["value"]["status"]:
+                            cur_channel = chInfo["channel"]
+                            
+                            self._channel_names[cur_channel]        = chInfo["name"]                        
+                            self._channel_models[cur_channel]       = chInfo["typeInfo"]
+                            self._is_doorbell_enabled[cur_channel]  = "Doorbell" in chInfo["typeInfo"]
+                            if chInfo["online"] == 1 and cur_channel not in self._channels:
+                                self._channels.append(cur_channel)
+                    else:
+                        for chInfo in data["value"]["status"]:
+                            # Just a dynamic name change is OK for the current "non dynamic" behavior.
+                            self._channel_names[chInfo["channel"]] = chInfo["name"]
 
                 elif data["cmd"] == "GetHddInfo":
                     self._hdd_info = data["value"]["HddInfo"]
