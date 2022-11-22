@@ -25,7 +25,6 @@ MANUFACTURER                    = "Reolink"
 DEFAULT_USE_SSL                 = False
 DEFAULT_STREAM                  = "sub"
 DEFAULT_PROTOCOL                = "rtmp"
-DEFAULT_CHANNEL                 = 0
 DEFAULT_TIMEOUT                 = 60
 DEFAULT_STREAM_FORMAT           = "h264"
 DEFAULT_RTMP_AUTH_METHOD        = 'PASSWORD'
@@ -63,7 +62,6 @@ class Host:
         username: str,
         password: str,
         use_https: bool                 = DEFAULT_USE_SSL,
-        channels: list[int]             = [DEFAULT_CHANNEL],
         protocol: str                   = DEFAULT_PROTOCOL,
         stream: str                     = DEFAULT_STREAM,
         timeout: int                    = DEFAULT_TIMEOUT,
@@ -114,8 +112,9 @@ class Host:
 
         ##############################################################################
         # Channels of cameras, used in this NVR ([0] for a directly connected camera)
-        self._channels: list[int]           = channels
+        self._channels: list[int]           = []
         self._channel_names: dict[int, str] = dict()
+        self._channel_models: dict[int, str] = dict()
 
         ##############################################################################
         # Video-stream formats
@@ -291,10 +290,6 @@ class Host:
         """Return the list of indices of channels' in use."""
         return self._channels
 
-    @channels.setter
-    def channels(self, value: list[int]):
-        self._channels = value
-
     @property
     def hdd_info(self) -> Optional[dict]:
         return self._hdd_info
@@ -365,6 +360,11 @@ class Host:
         return self._channel_names[channel]
     #endof camera_name()
 
+    def camera_model(self, channel: int) -> Optional[str]:
+        if self._channel_models is None or channel not in self._channel_models:
+            return "Unknown"
+        return self._channel_models[channel]
+    #endof camera_model()
 
     def motion_detected(self, channel: int) -> bool:
         """Return the motion detection state (polled)."""
@@ -834,6 +834,7 @@ class Host:
     async def get_host_data(self) -> bool:
         """Fetch the host settings/capabilities."""
         body = [
+            {"cmd": "Getchannelstatus"},
             {"cmd": "GetDevInfo", "action": 0, "param": {}},
             {"cmd": "GetLocalLink", "action": 0, "param": {}},
             {"cmd": "GetNetPort", "action": 0, "param": {}},
@@ -1144,14 +1145,16 @@ class Host:
                     self._nvr_model: str = devInfo["model"]
                     self._nvr_num_channels = devInfo["channelNum"]
                     self._nvr_sw_version_object = SoftwareVersion(self._nvr_sw_version)
-                    # Normally needs to be channel-specific, but there are no such "abilities" in channel-abilities response.
-                    # Thus let it be here so far, before Reolink clarifies its mess with "doorbell" ability and its NVR-notifications.
-                    if "Doorbell" in self._nvr_model:
-                        for channel in self._channels:
-                            self._is_doorbell_enabled[channel] = True
-                    else:
-                        for channel in self._channels:
-                            self._is_doorbell_enabled[channel] = False
+
+                elif data["cmd"] == "GetChannelstatus":
+                    if self._nvr_num_channels == 0:
+                        self._nvr_num_channels = data["value"]["count"]
+                    for chInfo in data["value"]["status"]:
+                        self._channel_names[chInfo["channel"]] = chInfo["name"]
+                        self._channel_models[chInfo["channel"]] = chInfo["typeInfo"]
+                        self._is_doorbell_enabled[chInfo["channel"]] = "Doorbell" in chInfo["typeInfo"]
+                        if chInfo["online"] == 1 and chInfo["channel"] not in self._channels:
+                            self._channels.append(chInfo["channel"])
 
                 elif data["cmd"] == "GetHddInfo":
                     self._hdd_info = data["value"]["HddInfo"]
@@ -1272,7 +1275,6 @@ class Host:
 
                 elif data["cmd"] == "GetOsd":
                     self._osd_settings[channel] = data["value"]
-                    self._channel_names[channel] = data["value"]["Osd"]["osdChannel"]["name"]
 
                 elif data["cmd"] == "GetFtp":
                     self._ftp_settings[channel] = data["value"]
