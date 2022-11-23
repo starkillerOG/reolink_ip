@@ -82,7 +82,8 @@ class Host:
         self._port: int                     = port
         self._rtsp_port: Optional[int]      = None
         self._rtmp_port: Optional[int]      = None
-        self._onvifport: Optional[int]      = None
+        self._onvif_port: Optional[int]     = None
+        self._onvif_enabled: Optional[bool] = None
         self._mac_address: Optional[str]    = None
 
         ##############################################################################
@@ -230,7 +231,11 @@ class Host:
 
     @property
     def onvif_port(self) -> Optional[int]:
-        return self._onvifport
+        return self._onvif_port
+
+    @property
+    def onvif_enabled(self) -> Optional[bool]:
+        return self._onvif_enabled
 
     @property
     def rtmp_port(self) -> Optional[int]:
@@ -1174,10 +1179,12 @@ class Host:
 
                 elif data["cmd"] == "GetNetPort":
                     self._netport_settings = data["value"]
-                    self._rtsp_port = data["value"]["NetPort"]["rtspPort"]
-                    self._rtmp_port = data["value"]["NetPort"]["rtmpPort"]
-                    self._onvifport = data["value"]["NetPort"]["onvifPort"]
-                    self._subscribe_url = f"http://{self._host}:{self._onvifport}/onvif/event_service"
+                    net_port = self._netport_settings["NetPort"]
+                    self._rtsp_port     = net_port["rtspPort"]
+                    self._rtmp_port     = net_port["rtmpPort"]
+                    self._onvif_port    = net_port["onvifPort"]
+                    self._onvif_enabled = net_port["onvifEnable"] == 1
+                    self._subscribe_url = f"http://{self._host}:{self._onvif_port}/onvif/event_service"
 
                 elif data["cmd"] == "GetUser":
                     self._users = data["value"]["User"]
@@ -1368,6 +1375,22 @@ class Host:
                 continue
     #endof map_channel_json_response()
 
+    async def set_net_port(self, enable_onvif: bool = None) -> bool:
+        """Set Network Port parameters on the host (NVR or camera)."""
+        if self._netport_settings is None:
+            _LOGGER.error("Host %s:%s: NetPort settings are not yet available, run get_host_data first.", self._host, self._port)
+            return False
+
+        body = [{"cmd": "SetNetPort", "param": self._netport_settings}]
+
+        if enable_onvif is not None:
+            body[0]["param"]["NetPort"]["onvifEnable"] = 1 if enable_onvif else 0
+
+        response = await self.send_setting(body)
+        self.expire_session() # When changing network port settings, tokens are invalidated.
+        
+        return response
+    #endof set_net_port()
 
     async def set_time(self, dateFmt = None, hours24 = None, tzOffset = None) -> bool:
         """Set time on the host (NVR or camera)."""
@@ -2097,11 +2120,11 @@ class Host:
 
     async def send_setting(self, body: dict) -> bool:
         command = body[0]["cmd"]
-        _LOGGER.debug("Sending command: \"%s\" to: %s:%s with body: %s", command, self._host, self._port, self._port, body)
+        _LOGGER.debug("Sending command: \"%s\" to: %s:%s with body: %s", command, self._host, self._port, body)
 
         response = await self.send(body, {"cmd": command})
         if response is None:
-            _LOGGER.error("Host %s:%s: error receiving response for command \"%s\".", self._host, self._port, self._port, command)
+            _LOGGER.error("Host %s:%s: error receiving response for command \"%s\".", self._host, self._port, command)
             self.expire_session()
             return False
 
@@ -2126,13 +2149,14 @@ class Host:
     #endof send_setting()
 
 
-    async def send(self, body, param = None, expected_content_type: Optional[str] = None) -> Optional[list]:
+    async def send(self, body, param = None, expected_content_type: Optional[str] = None, retry: bool = False) -> Optional[list]:
         """Generic send method."""
 
         if self._aiohttp_session is not None and self._aiohttp_session.closed:
             self._aiohttp_session = aiohttp.ClientSession(timeout=self._timeout, connector=aiohttp.TCPConnector(ssl=SSL_CONTEXT))
 
-        if (body is None or (body[0]["cmd"] != "Login" and body[0]["cmd"] != "Logout")):
+        is_login_logout = body is not None and (body[0]["cmd"] == "Login" or body[0]["cmd"] == "Logout")
+        if not is_login_logout:
             if not await self.login():
                 return None
 
@@ -2160,7 +2184,14 @@ class Host:
 
                 if len(json_data) < 500 and response.content_type == 'text/html':
                     if b'"detail" : "invalid user"' in json_data or b'"detail" : "login failed"' in json_data or b'detail" : "please login first' in json_data:
-                        raise CredentialsInvalidError()
+                        if is_login_logout:
+                            raise CredentialsInvalidError()
+                        else:
+                            if retry:
+                                raise CredentialsInvalidError()
+                            _LOGGER.debug("Host %s:%s: \"invalid login\" response, trying to login again and retry the command.", self._host, self._port)
+                            self.expire_session()
+                            return await self.send(body, param, expected_content_type, retry = True)
 
                 if response.status >= 400:
                     raise ApiError("API returned HTTP status ERROR code {}/{}".format(response.status, response.reason))
@@ -2185,7 +2216,14 @@ class Host:
 
                 if len(json_data) < 500 and response.content_type == 'text/html':
                     if ('"detail" : "invalid user"' in json_data or '"detail" : "login failed"' in json_data or 'detail" : "please login first' in json_data) and body[0]["cmd"] != "Logout":
-                        raise CredentialsInvalidError()
+                        if is_login_logout:
+                            raise CredentialsInvalidError()
+                        else:
+                            if retry:
+                                raise CredentialsInvalidError()
+                            _LOGGER.debug("Host %s:%s: \"invalid login\" response, trying to login again and retry the command.", self._host, self._port)
+                            self.expire_session()
+                            return await self.send(body, param, expected_content_type, retry = True)                     
 
                 if response.status >= 400:
                     raise ApiError("API returned HTTP status ERROR code {}/{}.".format(response.status, response.reason))
@@ -2475,17 +2513,17 @@ class Host:
             _LOGGER.debug("Attempting to unsubscribe previous (dead) sessions notifications...")
 
             # These work for RLN8-410 NVR, so up to 3 maximum subscriptions on it
-            parameters = {"To": f"http://{self._host}:{self._onvifport}/onvif/Notification?Idx=00_0"}
+            parameters = {"To": f"http://{self._host}:{self._onvif_port}/onvif/Notification?Idx=00_0"}
             parameters.update(await self.get_digest())
             xml = template.format(**parameters)
             await self.subscription_send(headers, xml)
 
-            parameters = {"To": f"http://{self._host}:{self._onvifport}/onvif/Notification?Idx=00_1"}
+            parameters = {"To": f"http://{self._host}:{self._onvif_port}/onvif/Notification?Idx=00_1"}
             parameters.update(await self.get_digest())
             xml = template.format(**parameters)
             await self.subscription_send(headers, xml)
 
-            parameters = {"To": f"http://{self._host}:{self._onvifport}/onvif/Notification?Idx=00_2"}
+            parameters = {"To": f"http://{self._host}:{self._onvif_port}/onvif/Notification?Idx=00_2"}
             parameters.update(await self.get_digest())
             xml = template.format(**parameters)
             await self.subscription_send(headers, xml)
