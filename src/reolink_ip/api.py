@@ -25,7 +25,6 @@ MANUFACTURER                    = "Reolink"
 DEFAULT_USE_SSL                 = False
 DEFAULT_STREAM                  = "sub"
 DEFAULT_PROTOCOL                = "rtmp"
-DEFAULT_CHANNEL                 = 0
 DEFAULT_TIMEOUT                 = 60
 DEFAULT_STREAM_FORMAT           = "h264"
 DEFAULT_RTMP_AUTH_METHOD        = 'PASSWORD'
@@ -63,7 +62,6 @@ class Host:
         username: str,
         password: str,
         use_https: bool                 = DEFAULT_USE_SSL,
-        channels: list[int]             = [DEFAULT_CHANNEL],
         protocol: str                   = DEFAULT_PROTOCOL,
         stream: str                     = DEFAULT_STREAM,
         timeout: int                    = DEFAULT_TIMEOUT,
@@ -85,7 +83,7 @@ class Host:
         self._rtsp_port: Optional[int]      = None
         self._rtmp_port: Optional[int]      = None
         self._onvif_port: Optional[int]     = None
-        self._onvif_enable: Optional[bool]  = None
+        self._onvif_enabled: Optional[bool] = None
         self._mac_address: Optional[str]    = None
 
         ##############################################################################
@@ -115,8 +113,9 @@ class Host:
 
         ##############################################################################
         # Channels of cameras, used in this NVR ([0] for a directly connected camera)
-        self._channels: list[int]           = channels
-        self._channel_names: dict[int, str] = dict()
+        self._channels: list[int]               = []
+        self._channel_names: dict[int, str]     = dict()
+        self._channel_models: dict[int, str]    = dict()
 
         ##############################################################################
         # Video-stream formats
@@ -235,8 +234,8 @@ class Host:
         return self._onvif_port
 
     @property
-    def onvif_enable(self) -> Optional[bool]:
-        return self._onvif_enable
+    def onvif_enabled(self) -> Optional[bool]:
+        return self._onvif_enabled
 
     @property
     def rtmp_port(self) -> Optional[int]:
@@ -295,10 +294,6 @@ class Host:
     def channels(self) -> list[int]:
         """Return the list of indices of channels' in use."""
         return self._channels
-
-    @channels.setter
-    def channels(self, value: list[int]):
-        self._channels = value
 
     @property
     def hdd_info(self) -> Optional[dict]:
@@ -370,6 +365,11 @@ class Host:
         return self._channel_names[channel]
     #endof camera_name()
 
+    def camera_model(self, channel: int) -> Optional[str]:
+        if self._channel_models is None or channel not in self._channel_models:
+            return "Unknown"
+        return self._channel_models[channel]
+    #endof camera_model()
 
     def motion_detected(self, channel: int) -> bool:
         """Return the motion detection state (polled)."""
@@ -839,6 +839,7 @@ class Host:
     async def get_host_data(self) -> bool:
         """Fetch the host settings/capabilities."""
         body = [
+            {"cmd": "Getchannelstatus"},
             {"cmd": "GetDevInfo", "action": 0, "param": {}},
             {"cmd": "GetLocalLink", "action": 0, "param": {}},
             {"cmd": "GetNetPort", "action": 0, "param": {}},
@@ -1149,14 +1150,25 @@ class Host:
                     self._nvr_model: str = devInfo["model"]
                     self._nvr_num_channels = devInfo["channelNum"]
                     self._nvr_sw_version_object = SoftwareVersion(self._nvr_sw_version)
-                    # Normally needs to be channel-specific, but there are no such "abilities" in channel-abilities response.
-                    # Thus let it be here so far, before Reolink clarifies its mess with "doorbell" ability and its NVR-notifications.
-                    if "Doorbell" in self._nvr_model:
-                        for channel in self._channels:
-                            self._is_doorbell_enabled[channel] = True
+
+                elif data["cmd"] == "GetChannelstatus":
+                    # Maybe later add a support of dynamic cameras' connect/disconnect, without API consumer re-init.
+                    # A callback from here to the API consumer would be needed I think if changes are seen.
+                    if self._nvr_num_channels == 0:
+                        self._nvr_num_channels = data["value"]["count"]
+                        
+                        for chInfo in data["value"]["status"]:
+                            cur_channel = chInfo["channel"]
+                            
+                            self._channel_names[cur_channel]        = chInfo["name"]                        
+                            self._channel_models[cur_channel]       = chInfo["typeInfo"]
+                            self._is_doorbell_enabled[cur_channel]  = "Doorbell" in chInfo["typeInfo"]
+                            if chInfo["online"] == 1 and cur_channel not in self._channels:
+                                self._channels.append(cur_channel)
                     else:
-                        for channel in self._channels:
-                            self._is_doorbell_enabled[channel] = False
+                        for chInfo in data["value"]["status"]:
+                            # Just a dynamic name change is OK for the current "non dynamic" behavior.
+                            self._channel_names[chInfo["channel"]] = chInfo["name"]
 
                 elif data["cmd"] == "GetHddInfo":
                     self._hdd_info = data["value"]["HddInfo"]
@@ -1167,10 +1179,11 @@ class Host:
 
                 elif data["cmd"] == "GetNetPort":
                     self._netport_settings = data["value"]
-                    self._rtsp_port = data["value"]["NetPort"]["rtspPort"]
-                    self._rtmp_port = data["value"]["NetPort"]["rtmpPort"]
-                    self._onvif_port = data["value"]["NetPort"]["onvifPort"]
-                    self._onvif_enable = data["value"]["NetPort"]["onvifEnable"] == 1
+                    net_port = self._netport_settings["NetPort"]
+                    self._rtsp_port     = net_port["rtspPort"]
+                    self._rtmp_port     = net_port["rtmpPort"]
+                    self._onvif_port    = net_port["onvifPort"]
+                    self._onvif_enabled = net_port["onvifEnable"] == 1
                     self._subscribe_url = f"http://{self._host}:{self._onvif_port}/onvif/event_service"
 
                 elif data["cmd"] == "GetUser":
@@ -1278,7 +1291,6 @@ class Host:
 
                 elif data["cmd"] == "GetOsd":
                     self._osd_settings[channel] = data["value"]
-                    self._channel_names[channel] = data["value"]["Osd"]["osdChannel"]["name"]
 
                 elif data["cmd"] == "GetFtp":
                     self._ftp_settings[channel] = data["value"]
@@ -1363,24 +1375,20 @@ class Host:
                 continue
     #endof map_channel_json_response()
 
-    async def set_net_port(self, onvif_enable: bool = None) -> bool:
+    async def set_net_port(self, enable_onvif: bool = None) -> bool:
         """Set Network Port parameters on the host (NVR or camera)."""
-        """Arguments:"""
-        """onvif_enable (boolean) Enable ONVIF protocol"""
         if self._netport_settings is None:
             _LOGGER.error("Host %s:%s: NetPort settings are not yet available, run get_host_data first.", self._host, self._port)
             return False
 
         body = [{"cmd": "SetNetPort", "param": self._netport_settings}]
 
-        if onvif_enable is not None:
-            if onvif_enable:
-                body[0]["param"]["NetPort"]["onvifEnable"] = 1
-            else:
-                body[0]["param"]["NetPort"]["onvifEnable"] = 0
+        if enable_onvif is not None:
+            body[0]["param"]["NetPort"]["onvifEnable"] = 1 if enable_onvif else 0
 
         response = await self.send_setting(body)
-        self.expire_session()   # when changing network port settings, tokens are invalidated.
+        self.expire_session() # When changing network port settings, tokens are invalidated.
+        
         return response
     #endof set_net_port()
 
@@ -2147,10 +2155,9 @@ class Host:
         if self._aiohttp_session is not None and self._aiohttp_session.closed:
             self._aiohttp_session = aiohttp.ClientSession(timeout=self._timeout, connector=aiohttp.TCPConnector(ssl=SSL_CONTEXT))
 
-        if (body is None or (body[0]["cmd"] != "Login" and body[0]["cmd"] != "Logout")):
+        is_login_logout = body[0]["cmd"] == "Login" or body[0]["cmd"] == "Logout"
+        if body is None or not is_login_logout:
             if not await self.login():
-                if retry:
-                    raise CredentialsInvalidError()
                 return None
 
         if not param:
@@ -2177,11 +2184,14 @@ class Host:
 
                 if len(json_data) < 500 and response.content_type == 'text/html':
                     if b'"detail" : "invalid user"' in json_data or b'"detail" : "login failed"' in json_data or b'detail" : "please login first' in json_data:
-                        if retry:
+                        if is_login_logout:
                             raise CredentialsInvalidError()
-                        _LOGGER.debug("Invalid login response, try login again and retry command")
-                        self.expire_session()
-                        return await self.send(body, param, expected_content_type, retry=True)
+                        else:
+                            if retry:
+                                raise CredentialsInvalidError()
+                            _LOGGER.debug("Host %s:%s: \"invalid login\" response, trying to login again and retry the command.", self._host, self._port)
+                            self.expire_session()
+                            return await self.send(body, param, expected_content_type, retry = True)
 
                 if response.status >= 400:
                     raise ApiError("API returned HTTP status ERROR code {}/{}".format(response.status, response.reason))
@@ -2206,12 +2216,14 @@ class Host:
 
                 if len(json_data) < 500 and response.content_type == 'text/html':
                     if ('"detail" : "invalid user"' in json_data or '"detail" : "login failed"' in json_data or 'detail" : "please login first' in json_data) and body[0]["cmd"] != "Logout":
-                        if retry:
+                        if is_login_logout:
                             raise CredentialsInvalidError()
-                        _LOGGER.debug("Invalid login response, try login again and retry command")
-                        self.expire_session()
-                        return await self.send(body, param, expected_content_type, retry=True)
-                        
+                        else:
+                            if retry:
+                                raise CredentialsInvalidError()
+                            _LOGGER.debug("Host %s:%s: \"invalid login\" response, trying to login again and retry the command.", self._host, self._port)
+                            self.expire_session()
+                            return await self.send(body, param, expected_content_type, retry = True)                     
 
                 if response.status >= 400:
                     raise ApiError("API returned HTTP status ERROR code {}/{}.".format(response.status, response.reason))
