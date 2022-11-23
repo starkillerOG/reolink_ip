@@ -1183,7 +1183,7 @@ class Host:
                     self._rtsp_port     = net_port["rtspPort"]
                     self._rtmp_port     = net_port["rtmpPort"]
                     self._onvif_port    = net_port["onvifPort"]
-                    self._onvif_enabled = net_port["onvifEnable"] == 1
+                    self._onvif_enabled = net_port.get("onvifEnable", 1) == 1
                     self._subscribe_url = f"http://{self._host}:{self._onvif_port}/onvif/event_service"
 
                 elif data["cmd"] == "GetUser":
