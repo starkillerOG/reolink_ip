@@ -113,6 +113,7 @@ class Host:
 
         ##############################################################################
         # Channels of cameras, used in this NVR ([0] for a directly connected camera)
+        self._GetChannelStatus_present: bool    = False
         self._channels: list[int]               = []
         self._channel_names: dict[int, str]     = dict()
         self._channel_models: dict[int, str]    = dict()
@@ -1141,20 +1142,15 @@ class Host:
                 if data["code"] == 1:  # -->Error, like "ability error"
                     continue
 
-                if data["cmd"] == "GetDevInfo":
-                    devInfo = data["value"]["DevInfo"]
-                    self._is_nvr = devInfo.get("exactType", "CAM") == "NVR"
-                    self._nvr_serial = devInfo["serial"]
-                    self._nvr_name = devInfo["name"]
-                    self._nvr_sw_version = devInfo["firmVer"]
-                    self._nvr_model: str = devInfo["model"]
-                    self._nvr_num_channels = devInfo["channelNum"]
-                    self._nvr_sw_version_object = SoftwareVersion(self._nvr_sw_version)
-
-                elif data["cmd"] == "GetChannelstatus":
+                if data["cmd"] == "GetChannelstatus":
                     # Maybe later add a support of dynamic cameras' connect/disconnect, without API consumer re-init.
                     # A callback from here to the API consumer would be needed I think if changes are seen.
-                    if self._nvr_num_channels == 0:
+                    if not self._GetChannelStatus_present or self._nvr_num_channels == 0 or len(self._channels) == 0:
+                        self._channels.clear()
+                        self._channel_names.clear()
+                        self._channel_models.clear()
+                        self._is_doorbell_enabled.clear()
+
                         self._nvr_num_channels = data["value"]["count"]
                         
                         for chInfo in data["value"]["status"]:
@@ -1163,12 +1159,55 @@ class Host:
                             self._channel_names[cur_channel]        = chInfo["name"]                        
                             self._channel_models[cur_channel]       = chInfo["typeInfo"]
                             self._is_doorbell_enabled[cur_channel]  = "Doorbell" in chInfo["typeInfo"]
-                            if chInfo["online"] == 1 and cur_channel not in self._channels:
+                            if chInfo["online"] == 1:
                                 self._channels.append(cur_channel)
                     else:
                         for chInfo in data["value"]["status"]:
                             # Just a dynamic name change is OK for the current "non dynamic" behavior.
                             self._channel_names[chInfo["channel"]] = chInfo["name"]
+
+                    if not self._GetChannelStatus_present:
+                        self._GetChannelStatus_present = True
+
+                    break
+
+            except Exception as e:  # pylint: disable=bare-except
+                _LOGGER.error("Host %s:%s failed mapping JSON data: %s, traceback:\n%s\n", self._host, self._port, e, traceback.format_exc())
+                continue
+
+        for data in json_data:
+            try:
+                if data["code"] == 1:  # -->Error, like "ability error"
+                    continue
+
+                if data["cmd"] == "GetDevInfo":
+                    devInfo = data["value"]["DevInfo"]
+                    self._is_nvr                = devInfo.get("exactType", "CAM") == "NVR"
+                    self._nvr_serial            = devInfo["serial"]
+                    self._nvr_name              = devInfo["name"]
+                    self._nvr_sw_version        = devInfo["firmVer"]
+                    self._nvr_model: str        = devInfo["model"]
+                    self._nvr_sw_version_object = SoftwareVersion(self._nvr_sw_version)
+
+                    # In case the "GetChannelStatus" command not supported by the device.
+                    if self._nvr_num_channels == 0:
+                        self._channels.clear()
+                        self._channel_names.clear()
+                        self._channel_models.clear()
+                        self._is_doorbell_enabled.clear()
+
+                        self._nvr_num_channels = devInfo["channelNum"]
+
+                        if self._is_nvr:
+                            _LOGGER.warning("Your %s NVR doesn't support the \"Getchannelstatus\" command. Probably you need to update your firmware.\nNo way to recognize active channels, all %s channels will be considered \"active\" as a result.", self._nvr_name, self._nvr_num_channels)
+
+                        is_doorbell = "Doorbell" in self._nvr_model
+
+                        if self._nvr_num_channels > 0:
+                            for i in range(self._nvr_num_channels):
+                                self._channels.append(i)
+                                self._channel_models[i]         = self._nvr_model
+                                self._is_doorbell_enabled[i]    = is_doorbell
 
                 elif data["cmd"] == "GetHddInfo":
                     self._hdd_info = data["value"]["HddInfo"]
@@ -1291,6 +1330,8 @@ class Host:
 
                 elif data["cmd"] == "GetOsd":
                     self._osd_settings[channel] = data["value"]
+                    if not self._GetChannelStatus_present:
+                        self._channel_names[channel] = data["value"]["Osd"]["osdChannel"]["name"]
 
                 elif data["cmd"] == "GetFtp":
                     self._ftp_settings[channel] = data["value"]
