@@ -114,7 +114,8 @@ class Host:
         ##############################################################################
         # Channels of cameras, used in this NVR ([0] for a directly connected camera)
         self._GetChannelStatus_present: bool    = False
-        self._channels: list[int]               = []
+        self._GetChannelStatus_has_name: bool   = False
+        self._channels: list[int]               = list()
         self._channel_names: dict[int, str]     = dict()
         self._channel_models: dict[int, str]    = dict()
 
@@ -1139,32 +1140,48 @@ class Host:
         """Map the JSON objects to internal cache-objects."""
         for data in json_data:
             try:
-                if data["code"] == 1:  # -->Error, like "ability error"
+                if data["code"] == 1:  # Error, like "ability error"
                     continue
 
                 if data["cmd"] == "GetChannelstatus":
                     # Maybe later add a support of dynamic cameras' connect/disconnect, without API consumer re-init.
                     # A callback from here to the API consumer would be needed I think if changes are seen.
-                    if not self._GetChannelStatus_present or self._nvr_num_channels == 0 or len(self._channels) == 0:
+                    if not self._GetChannelStatus_present and (self._nvr_num_channels == 0 or len(self._channels) == 0):
                         self._channels.clear()
-                        self._channel_names.clear()
                         self._channel_models.clear()
                         self._is_doorbell_enabled.clear()
 
-                        self._nvr_num_channels = data["value"]["count"]
+                        cur_value = data["value"]
+                        self._nvr_num_channels = cur_value["count"]
+
+                        if self._nvr_num_channels > 0:
+                            cur_status = cur_value["status"]
+
+                            # Not all Reolink devices respond with "name" attribute.
+                            if "name" in cur_status[0]:
+                                self._GetChannelStatus_has_name = True
+                                self._channel_names.clear()
+                            else:
+                                self._GetChannelStatus_has_name = False
                         
-                        for chInfo in data["value"]["status"]:
-                            cur_channel = chInfo["channel"]
-                            
-                            self._channel_names[cur_channel]        = chInfo["name"]                        
-                            self._channel_models[cur_channel]       = chInfo["typeInfo"]
-                            self._is_doorbell_enabled[cur_channel]  = "Doorbell" in chInfo["typeInfo"]
-                            if chInfo["online"] == 1:
-                                self._channels.append(cur_channel)
-                    else:
-                        for chInfo in data["value"]["status"]:
-                            # Just a dynamic name change is OK for the current "non dynamic" behavior.
-                            self._channel_names[chInfo["channel"]] = chInfo["name"]
+                            for ch_info in cur_status:
+                                if ch_info["online"] == 1:
+                                    cur_channel = ch_info["channel"]
+                                    
+                                    if self._GetChannelStatus_has_name:
+                                        self._channel_names[cur_channel] = ch_info["name"]
+
+                                    self._channel_models[cur_channel]       = ch_info.get("typeInfo", "Unknown") # Not all Reolink devices respond with "typeInfo" attribute.
+                                    self._is_doorbell_enabled[cur_channel]  = "Doorbell" in self._channel_models[cur_channel]
+                                    self._channels.append(cur_channel)
+                        else:
+                            self._channel_names.clear()
+                    elif self._GetChannelStatus_has_name:
+                        cur_status = data["value"]["status"]
+                        for ch_info in cur_status:
+                            if ch_info["online"] == 1:
+                                # Just a dynamic name change is OK for the current "non dynamic" behavior.
+                                self._channel_names[ch_info["channel"]] = ch_info["name"]
 
                     if not self._GetChannelStatus_present:
                         self._GetChannelStatus_present = True
@@ -1177,37 +1194,37 @@ class Host:
 
         for data in json_data:
             try:
-                if data["code"] == 1:  # -->Error, like "ability error"
+                if data["code"] == 1:  # Error, like "ability error"
                     continue
 
                 if data["cmd"] == "GetDevInfo":
-                    devInfo = data["value"]["DevInfo"]
-                    self._is_nvr                = devInfo.get("exactType", "CAM") == "NVR"
-                    self._nvr_serial            = devInfo["serial"]
-                    self._nvr_name              = devInfo["name"]
-                    self._nvr_sw_version        = devInfo["firmVer"]
-                    self._nvr_model: str        = devInfo["model"]
+                    dev_info = data["value"]["DevInfo"]
+                    self._is_nvr                = dev_info.get("exactType", "CAM") == "NVR"
+                    self._nvr_serial            = dev_info["serial"]
+                    self._nvr_name              = dev_info["name"]
+                    self._nvr_sw_version        = dev_info["firmVer"]
+                    self._nvr_model: str        = dev_info["model"]
                     self._nvr_sw_version_object = SoftwareVersion(self._nvr_sw_version)
 
                     # In case the "GetChannelStatus" command not supported by the device.
-                    if self._nvr_num_channels == 0:
+                    if not self._GetChannelStatus_present and self._nvr_num_channels == 0:
                         self._channels.clear()
-                        self._channel_names.clear()
                         self._channel_models.clear()
                         self._is_doorbell_enabled.clear()
 
-                        self._nvr_num_channels = devInfo["channelNum"]
+                        self._nvr_num_channels = dev_info["channelNum"]
 
                         if self._is_nvr:
                             _LOGGER.warning("Your %s NVR doesn't support the \"Getchannelstatus\" command. Probably you need to update your firmware.\nNo way to recognize active channels, all %s channels will be considered \"active\" as a result.", self._nvr_name, self._nvr_num_channels)
 
-                        is_doorbell = "Doorbell" in self._nvr_model
-
                         if self._nvr_num_channels > 0:
+                            is_doorbell = "Doorbell" in self._nvr_model
                             for i in range(self._nvr_num_channels):
-                                self._channels.append(i)
                                 self._channel_models[i]         = self._nvr_model
                                 self._is_doorbell_enabled[i]    = is_doorbell
+                                self._channels.append(i)
+                        else:
+                            self._channel_names.clear()
 
                 elif data["cmd"] == "GetHddInfo":
                     self._hdd_info = data["value"]["HddInfo"]
@@ -1330,7 +1347,7 @@ class Host:
 
                 elif data["cmd"] == "GetOsd":
                     self._osd_settings[channel] = data["value"]
-                    if not self._GetChannelStatus_present:
+                    if not self._GetChannelStatus_present or not self._GetChannelStatus_has_name:
                         self._channel_names[channel] = data["value"]["Osd"]["osdChannel"]["name"]
 
                 elif data["cmd"] == "GetFtp":
