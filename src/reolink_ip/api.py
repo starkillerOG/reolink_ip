@@ -107,6 +107,7 @@ class Host:
         self._nvr_name: Optional[str]                           = None
         self._nvr_serial: Optional[str]                         = None
         self._nvr_model: Optional[str]                          = None
+        self._nvr_hw_version: Optional[str]                     = None
         self._nvr_num_channels: int                             = 0
         self._nvr_sw_version: Optional[str]                     = None
         self._nvr_sw_version_object: Optional[SoftwareVersion]  = None
@@ -276,6 +277,10 @@ class Host:
     @property
     def model(self) -> Optional[str]:
         return self._nvr_model
+
+    @property
+    def hardware_version(self) -> Optional[str]:
+        return self._nvr_hw_version
 
     @property
     def manufacturer(self) -> str:
@@ -1204,6 +1209,7 @@ class Host:
                     self._nvr_name              = dev_info["name"]
                     self._nvr_sw_version        = dev_info["firmVer"]
                     self._nvr_model: str        = dev_info["model"]
+                    self._nvr_hw_version        = dev_info["hardVer"]
                     self._nvr_sw_version_object = SoftwareVersion(self._nvr_sw_version)
 
                     # In case the "GetChannelStatus" command not supported by the device.
