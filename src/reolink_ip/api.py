@@ -1330,7 +1330,8 @@ class Host:
 
                 elif data["cmd"] == "GetAiState":
                     self._is_ia_enabled[channel] = True
-                    self._ai_detection_states[channel] = {}
+                    self._ai_detection_states[channel]  = {}
+                    self._ai_detection_support[channel] = {}
                     found_channel = False
                     for key, value in data["value"].items():
                         if not found_channel and key == "channel" and value == channel:
