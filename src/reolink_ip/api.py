@@ -162,9 +162,10 @@ class Host:
 
         ##############################################################################
         # States
-        self._motion_detection_states: dict[int, bool]  = dict()
-        self._is_ia_enabled: dict[int, bool]            = dict()
-        self._is_doorbell_enabled: dict[int, bool]      = dict()
+        self._motion_detection_states: dict[int, bool]         = dict()
+        self._is_ia_enabled: dict[int, bool]                   = dict()
+        self._is_doorbell_enabled: dict[int, bool]             = dict()
+        self._ai_detection_support: dict[int, dict[str, bool]] = dict()
 
         ##############################################################################
         # Camera-level states
@@ -392,6 +393,20 @@ class Host:
                 return self._ai_detection_states[channel]
             return {}
     #endof ai_detected()
+
+    def ai_supported(self, channel: int, object_type: Optional[str] = None):
+        """Return if the AI object type detection is supported or not."""
+        if object_type is not None:
+            if self._ai_detection_support is not None and channel in self._ai_detection_support and self._ai_detection_support[channel] is not None:
+                for key, value in self._ai_detection_support[channel].items():
+                    if key == object_type or (object_type == PERSON_DETECTION_TYPE and key == "people") or (object_type == PET_DETECTION_TYPE and key == "dog_cat"):
+                        return value
+            return False
+        else:
+            if self._ai_detection_support is not None and channel in self._ai_detection_support and self._ai_detection_support[channel] is not None:
+                return self._ai_detection_support[channel]
+            return {}
+    #endof ai_supported()
 
 
     def audio_alarm_enabled(self, channel: int) -> bool:
@@ -1320,6 +1335,7 @@ class Host:
 
                         if isinstance(value, int):  # compatibility with firmware < 3.0.0-494
                             self._ai_detection_states[channel][key] = value == 1
+                            self._ai_detection_support[channel][key] = True
                         else:
                             # from firmware 3.0.0.0-494 there is a new json structure:
                             # [
@@ -1343,7 +1359,9 @@ class Host:
                             #         }
                             #     }
                             # ]
-                            self._ai_detection_states[channel][key] = value.get('support', 0) == 1 and value.get('alarm_state', 0) == 1
+                            supported: bool = value.get('support', 0) == 1
+                            self._ai_detection_states[channel][key] = supported and value.get('alarm_state', 0) == 1
+                            self._ai_detection_support[channel][key] = supported
 
                 elif data["cmd"] == "GetOsd":
                     self._osd_settings[channel] = data["value"]
