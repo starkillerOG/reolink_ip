@@ -245,6 +245,7 @@ class Host:
     def rtsp_port(self) -> Optional[int]:
         return self._rtsp_port
 
+    @property
     def onvif_enabled(self) -> Optional[bool]:
         return self._onvif_enabled
 
