@@ -83,6 +83,8 @@ class Host:
         self._rtsp_port: Optional[int]      = None
         self._rtmp_port: Optional[int]      = None
         self._onvif_port: Optional[int]     = None
+        self._rtsp_enabled: Optional[bool]  = None
+        self._rtmp_enabled: Optional[bool]  = None
         self._onvif_enabled: Optional[bool] = None
         self._mac_address: Optional[str]    = None
 
@@ -236,16 +238,23 @@ class Host:
         return self._onvif_port
 
     @property
-    def onvif_enabled(self) -> Optional[bool]:
-        return self._onvif_enabled
-
-    @property
     def rtmp_port(self) -> Optional[int]:
         return self._rtmp_port
 
     @property
     def rtsp_port(self) -> Optional[int]:
         return self._rtsp_port
+
+    def onvif_enabled(self) -> Optional[bool]:
+        return self._onvif_enabled
+
+    @property
+    def rtmp_enabled(self) -> Optional[bool]:
+        return self._rtmp_enabled
+
+    @property
+    def rtsp_enabled(self) -> Optional[bool]:
+        return self._rtsp_enabled
 
     @property
     def mac_address(self) -> Optional[str]:
@@ -1239,6 +1248,8 @@ class Host:
                     self._rtsp_port     = net_port["rtspPort"]
                     self._rtmp_port     = net_port["rtmpPort"]
                     self._onvif_port    = net_port["onvifPort"]
+                    self._rtsp_enabled  = net_port.get("rtspEnable", 1) == 1
+                    self._rtmp_enabled  = net_port.get("rtmpEnable", 1) == 1
                     self._onvif_enabled = net_port.get("onvifEnable", 1) == 1
                     self._subscribe_url = f"http://{self._host}:{self._onvif_port}/onvif/event_service"
 
@@ -1433,7 +1444,7 @@ class Host:
                 continue
     #endof map_channel_json_response()
 
-    async def set_net_port(self, enable_onvif: bool = None) -> bool:
+    async def set_net_port(self, enable_onvif: bool = None, enable_rtmp: bool = None, enable_rtsp: bool = None) -> bool:
         """Set Network Port parameters on the host (NVR or camera)."""
         if self._netport_settings is None:
             _LOGGER.error("Host %s:%s: NetPort settings are not yet available, run get_host_data first.", self._host, self._port)
@@ -1443,6 +1454,10 @@ class Host:
 
         if enable_onvif is not None:
             body[0]["param"]["NetPort"]["onvifEnable"] = 1 if enable_onvif else 0
+        if enable_rtmp is not None:
+            body[0]["param"]["NetPort"]["rtmpEnable"] = 1 if enable_rtmp else 0
+        if enable_rtsp is not None:
+            body[0]["param"]["NetPort"]["rtspEnable"] = 1 if enable_rtsp else 0
 
         response = await self.send_setting(body)
         self.expire_session() # When changing network port settings, tokens are invalidated.
