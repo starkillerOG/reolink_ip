@@ -1076,42 +1076,47 @@ class Host:
     #endof get_snapshot()
 
 
-    def get_rtmp_stream_source(self, channel: int) -> Optional[str]:
+    def get_rtmp_stream_source(self, channel: int, stream: str = None) -> Optional[str]:
         if channel not in self._channels:
             return None
 
         stream_type = None
-        if self._stream == "sub":
+        if stream = None:
+            stream = self.stream
+        if stream == "sub":
             stream_type = 1
         else:
             stream_type = 0
         if self._rtmp_auth_method == DEFAULT_RTMP_AUTH_METHOD:
             password = parse.quote(self._password)
-            return f"rtmp://{self._host}:{self._rtmp_port}/bcs/channel{channel}_{self._stream}.bcs?channel={channel}&stream={stream_type}&user={self._username}&password={password}"
+            return f"rtmp://{self._host}:{self._rtmp_port}/bcs/channel{channel}_{stream}.bcs?channel={channel}&stream={stream_type}&user={self._username}&password={password}"
 
-        return f"rtmp://{self._host}:{self._rtmp_port}/bcs/channel{channel}_{self._stream}.bcs?channel={channel}&stream={stream_type}&token={self._token}"
+        return f"rtmp://{self._host}:{self._rtmp_port}/bcs/channel{channel}_{stream}.bcs?channel={channel}&stream={stream_type}&token={self._token}"
     #endof get_rtmp_stream_source()
 
 
-    def get_rtsp_stream_source(self, channel: int) -> Optional[str]:
+    def get_rtsp_stream_source(self, channel: int, stream: str = None) -> Optional[str]:
         if channel not in self._channels:
             return None
 
+        if stream = None:
+            stream = self.stream
+
         password = parse.quote(self._password)
         channel = "{:02d}".format(channel + 1)
-        return f"rtsp://{self._username}:{password}@{self._host}:{self._rtsp_port}/{self._stream_format}Preview_{channel}_{self._stream}"
+        return f"rtsp://{self._username}:{password}@{self._host}:{self._rtsp_port}/{self._stream_format}Preview_{channel}_{stream}"
     #endof get_rtsp_stream_source()
 
 
-    async def get_stream_source(self, channel: int) -> Optional[str]:
+    async def get_stream_source(self, channel: int, stream: str = None) -> Optional[str]:
         """Return the stream source url."""
         if not await self.login():
             return None
 
-        if self._protocol == "rtmp":
-            return self.get_rtmp_stream_source(channel)
-        elif self._protocol == "rtsp":
-            return self.get_rtsp_stream_source(channel)
+        if self.protocol == "rtmp":
+            return self.get_rtmp_stream_source(channel, stream)
+        elif self.protocol == "rtsp":
+            return self.get_rtsp_stream_source(channel, stream)
         else:
             return None
     #endof get_stream_source()
@@ -1153,7 +1158,7 @@ class Host:
                     return "application/x-mpegURL", f"http://{host_url}:{host_port}/cgi-bin/api.cgi?&cmd=Playback&channel={channel}&source={filename}&user={self._username}&password={self._password}"
             else:
                 stream_type = None
-                if self._stream == "sub":
+                if self.stream == "sub":
                     stream_type = 1
                 else:
                     stream_type = 0
@@ -2159,7 +2164,7 @@ class Host:
                     "Search": {
                         "channel": channel,
                         "onlyStatus": 1 if status_only else 0,
-                        "streamType": self._stream,
+                        "streamType": self.stream,
                         "StartTime": {
                             "year": start.year,
                             "mon":  start.month,
