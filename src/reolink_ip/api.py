@@ -26,7 +26,6 @@ DEFAULT_USE_SSL                 = False
 DEFAULT_STREAM                  = "sub"
 DEFAULT_PROTOCOL                = "rtmp"
 DEFAULT_TIMEOUT                 = 60
-DEFAULT_STREAM_FORMAT           = "h264"
 DEFAULT_RTMP_AUTH_METHOD        = 'PASSWORD'
 SUBSCRIPTION_TERMINATION_TIME   = 15
 
@@ -65,7 +64,6 @@ class Host:
         protocol: str                   = DEFAULT_PROTOCOL,
         stream: str                     = DEFAULT_STREAM,
         timeout: int                    = DEFAULT_TIMEOUT,
-        stream_format: str              = DEFAULT_STREAM_FORMAT,
         rtmp_auth_method: str           = DEFAULT_RTMP_AUTH_METHOD,
         aiohttp_get_session_callback    = None):
 
@@ -123,7 +121,6 @@ class Host:
         # Video-stream formats
         self._stream: str           = stream
         self._protocol: str         = protocol
-        self._stream_format: str    = stream_format
         self._rtmp_auth_method: str = rtmp_auth_method
 
         ##############################################################################
@@ -308,14 +305,6 @@ class Host:
     @stream.setter
     def stream(self, value: str):
         self._stream = value
-
-    @property
-    def stream_format(self) -> str:
-        return self._stream_format
-
-    @stream_format.setter
-    def stream_format(self, value: str):
-        self._stream_format = value
 
     @property
     def protocol(self) -> str:
@@ -1069,7 +1058,7 @@ class Host:
 
         password = parse.quote(self._password)
         channel = "{:02d}".format(channel + 1)
-        return f"rtsp://{self._username}:{password}@{self._host}:{self._rtsp_port}/{self._stream_format}Preview_{channel}_{self._stream}"
+        return f"rtsp://{self._username}:{password}@{self._host}:{self._rtsp_port}/Preview_{channel}_{self._stream}"
     #endof get_rtsp_stream_source()
 
 
