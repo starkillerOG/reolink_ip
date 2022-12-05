@@ -1113,7 +1113,9 @@ class Host:
         if not await self.login():
             return None
 
-        if self.protocol == "rtmp":
+        if stream == "images":
+            return None
+        elif self.protocol == "rtmp":
             return self.get_rtmp_stream_source(channel, stream)
         elif self.protocol == "rtsp":
             return self.get_rtsp_stream_source(channel, stream)
