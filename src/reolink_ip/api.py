@@ -608,7 +608,10 @@ class Host:
             ]
             param = {"cmd": "Login", "token": "null"}
 
-            response = await self.send(body, param)
+            try:
+                response = await self.send(body, param)
+            except ApiError:
+                return False
             if response is None:
                 _LOGGER.error("Host: %s:%s: error receiving Reolink login response.", self._host, self._port)
                 return False
@@ -2308,7 +2311,7 @@ class Host:
                             self.expire_session()
                             return await self.send(body, param, expected_content_type, retry = True)
 
-                if response.status >= 400:
+                if response.status >= 400 or (is_login_logout and response.status != 200):
                     raise ApiError("API returned HTTP status ERROR code {}/{}".format(response.status, response.reason))
 
                 if expected_content_type is not None and response.content_type != expected_content_type:
@@ -2340,7 +2343,7 @@ class Host:
                             self.expire_session()
                             return await self.send(body, param, expected_content_type, retry = True)                     
 
-                if response.status >= 400:
+                if response.status >= 400 or (is_login_logout and response.status != 200):
                     raise ApiError("API returned HTTP status ERROR code {}/{}.".format(response.status, response.reason))
 
                 return json_data
