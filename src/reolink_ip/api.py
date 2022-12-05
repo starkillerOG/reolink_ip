@@ -22,7 +22,6 @@ import urllib.parse as parse
 from . import templates
 
 MANUFACTURER                    = "Reolink"
-DEFAULT_USE_SSL                 = False
 DEFAULT_STREAM                  = "sub"
 DEFAULT_PROTOCOL                = "rtmp"
 DEFAULT_TIMEOUT                 = 60
@@ -58,10 +57,10 @@ class Host:
     def __init__(
         self,
         host: str,
-        port: int,
         username: str,
         password: str,
-        use_https: bool                 = DEFAULT_USE_SSL,
+        port: Optional[int]             = None,
+        use_https: Optional[bool]       = None,
         protocol: str                   = DEFAULT_PROTOCOL,
         stream: str                     = DEFAULT_STREAM,
         timeout: int                    = DEFAULT_TIMEOUT,
@@ -75,11 +74,11 @@ class Host:
         ##############################################################################
         # Host
         self._url: str                      = ""
-        self._use_https: bool               = use_https
+        self._use_https: Optional[bool]     = use_https
         self._host: str                     = host
         self._external_host: Optional[str]  = None
         self._external_port: Optional[str]  = None
-        self._port: int                     = port
+        self._port: Optional[int]           = port
         self._rtsp_port: Optional[int]      = None
         self._rtmp_port: Optional[int]      = None
         self._onvif_port: Optional[int]     = None
@@ -224,6 +223,10 @@ class Host:
         self._external_host = value
 
     @property
+    def use_https(self) -> Optional[bool]:
+        return self._use_https
+
+    @property
     def external_port(self) -> Optional[str]:
         return self._external_port
 
@@ -232,7 +235,7 @@ class Host:
         self._external_port = value
 
     @property
-    def port(self) -> int:
+    def port(self) -> Optional[int]:
         return self._port
 
     @property
@@ -567,10 +570,10 @@ class Host:
 
 
     def refresh_base_url(self):
-        if self._use_https:
-            self._url = f"https://{self._host}:{self._port}/cgi-bin/api.cgi"
+        if self.use_https:
+            self._url = f"https://{self._host}:{self.port}/cgi-bin/api.cgi"
         else:
-            self._url = f"http://{self._host}:{self._port}/cgi-bin/api.cgi"
+            self._url = f"http://{self._host}:{self.port}/cgi-bin/api.cgi"
     #endof refresh_base_url()
 
 
@@ -578,6 +581,9 @@ class Host:
     # Methods
 
     async def login(self) -> bool:
+        if self.port is None or self.use_https is None:
+            return await self._login_try_ports()
+    
         await self._login_mutex.acquire()
 
         try:
@@ -636,6 +642,16 @@ class Host:
             self._login_mutex.release()
     #endof login()
 
+    async def _login_try_ports(self) -> bool:
+        self._port = 443
+        self.enable_https(True)
+        if await self.login():
+            return True
+
+        self._port = 80
+        self.enable_https(False)
+        return await self.login()
+    #endof _login_try_ports()
 
     async def logout(self, mutex_owned = False):
         body  = [{"cmd": "Logout", "action": 0, "param": {}}]
@@ -1134,20 +1150,20 @@ class Host:
         if external_url and self._external_port:
             host_port = self._external_port
         else:
-            host_port = self._port
+            host_port = self.port
 
         if self._is_nvr:
             # NVR VoDs "type=0": Adobe flv
             #return "video/x-flv", f"http://{host_url}:{host_port}/flv?port=1935&app=bcs&stream=playback.bcs&channel={channel}&type=0&start={filename}&seek=0&user={self._username}&password={self._password}"
             # NVR VoDs "type=1": mp4
             # return "video/mp4", f"http://{host_url}:{host_port}/flv?port=1935&app=bcs&stream=playback.bcs&channel={channel}&type=1&start={filename}&seek=0&user={self._username}&password={self._password}"
-            if self._use_https:
+            if self.use_https:
                 return "application/x-mpegURL", f"https://{host_url}:{host_port}/flv?port=1935&app=bcs&stream=playback.bcs&channel={channel}&type=1&start={filename}&seek=0&user={self._username}&password={self._password}"
             else:
                 return "application/x-mpegURL", f"http://{host_url}:{host_port}/flv?port=1935&app=bcs&stream=playback.bcs&channel={channel}&type=1&start={filename}&seek=0&user={self._username}&password={self._password}"
         else:
             if external_url:
-                if self._use_https:
+                if self.use_https:
                     return "application/x-mpegURL", f"https://{host_url}:{host_port}/cgi-bin/api.cgi?&cmd=Playback&channel={channel}&source={filename}&user={self._username}&password={self._password}"
                 else:
                     return "application/x-mpegURL", f"http://{host_url}:{host_port}/cgi-bin/api.cgi?&cmd=Playback&channel={channel}&source={filename}&user={self._username}&password={self._password}"
