@@ -1081,7 +1081,7 @@ class Host:
             return None
 
         stream_type = None
-        if stream = None:
+        if stream is None:
             stream = self.stream
         if stream == "sub":
             stream_type = 1
@@ -1099,7 +1099,7 @@ class Host:
         if channel not in self._channels:
             return None
 
-        if stream = None:
+        if stream is None:
             stream = self.stream
 
         password = parse.quote(self._password)
