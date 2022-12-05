@@ -81,6 +81,8 @@ class Host:
         self._rtsp_port: Optional[int]      = None
         self._rtmp_port: Optional[int]      = None
         self._onvif_port: Optional[int]     = None
+        self._rtsp_enabled: Optional[bool]  = None
+        self._rtmp_enabled: Optional[bool]  = None
         self._onvif_enabled: Optional[bool] = None
         self._mac_address: Optional[str]    = None
 
@@ -106,6 +108,7 @@ class Host:
         self._nvr_serial: Optional[str]                         = None
         self._nvr_model: Optional[str]                          = None
         self._nvr_num_channels: int                             = 0
+        self._nvr_hw_version: Optional[str]                     = None
         self._nvr_sw_version: Optional[str]                     = None
         self._nvr_sw_version_object: Optional[SoftwareVersion]  = None
 
@@ -159,9 +162,10 @@ class Host:
 
         ##############################################################################
         # States
-        self._motion_detection_states: dict[int, bool]  = dict()
-        self._is_ia_enabled: dict[int, bool]            = dict()
-        self._is_doorbell_enabled: dict[int, bool]      = dict()
+        self._motion_detection_states: dict[int, bool]         = dict()
+        self._is_ia_enabled: dict[int, bool]                   = dict()
+        self._is_doorbell_enabled: dict[int, bool]             = dict()
+        self._ai_detection_support: dict[int, dict[str, bool]] = dict()
 
         ##############################################################################
         # Camera-level states
@@ -233,16 +237,24 @@ class Host:
         return self._onvif_port
 
     @property
-    def onvif_enabled(self) -> Optional[bool]:
-        return self._onvif_enabled
-
-    @property
     def rtmp_port(self) -> Optional[int]:
         return self._rtmp_port
 
     @property
     def rtsp_port(self) -> Optional[int]:
         return self._rtsp_port
+
+    @property
+    def onvif_enabled(self) -> Optional[bool]:
+        return self._onvif_enabled
+
+    @property
+    def rtmp_enabled(self) -> Optional[bool]:
+        return self._rtmp_enabled
+
+    @property
+    def rtsp_enabled(self) -> Optional[bool]:
+        return self._rtsp_enabled
 
     @property
     def mac_address(self) -> Optional[str]:
@@ -273,6 +285,10 @@ class Host:
     @property
     def model(self) -> Optional[str]:
         return self._nvr_model
+
+    @property
+    def hardware_version(self) -> Optional[str]:
+        return self._nvr_hw_version
 
     @property
     def manufacturer(self) -> str:
@@ -381,6 +397,20 @@ class Host:
                 return self._ai_detection_states[channel]
             return {}
     #endof ai_detected()
+
+    def ai_supported(self, channel: int, object_type: Optional[str] = None):
+        """Return if the AI object type detection is supported or not."""
+        if object_type is not None:
+            if self._ai_detection_support is not None and channel in self._ai_detection_support and self._ai_detection_support[channel] is not None:
+                for key, value in self._ai_detection_support[channel].items():
+                    if key == object_type or (object_type == PERSON_DETECTION_TYPE and key == "people") or (object_type == PET_DETECTION_TYPE and key == "dog_cat"):
+                        return value
+            return False
+        else:
+            if self._ai_detection_support is not None and channel in self._ai_detection_support and self._ai_detection_support[channel] is not None:
+                return self._ai_detection_support[channel]
+            return {}
+    #endof ai_supported()
 
 
     def audio_alarm_enabled(self, channel: int) -> bool:
@@ -1191,8 +1221,9 @@ class Host:
                     self._is_nvr                = dev_info.get("exactType", "CAM") == "NVR"
                     self._nvr_serial            = dev_info["serial"]
                     self._nvr_name              = dev_info["name"]
-                    self._nvr_sw_version        = dev_info["firmVer"]
                     self._nvr_model: str        = dev_info["model"]
+                    self._nvr_hw_version        = dev_info["hardVer"]
+                    self._nvr_sw_version        = dev_info["firmVer"]
                     self._nvr_sw_version_object = SoftwareVersion(self._nvr_sw_version)
 
                     # In case the "GetChannelStatus" command not supported by the device.
@@ -1228,6 +1259,8 @@ class Host:
                     self._rtsp_port     = net_port["rtspPort"]
                     self._rtmp_port     = net_port["rtmpPort"]
                     self._onvif_port    = net_port["onvifPort"]
+                    self._rtsp_enabled  = net_port.get("rtspEnable", 1) == 1
+                    self._rtmp_enabled  = net_port.get("rtmpEnable", 1) == 1
                     self._onvif_enabled = net_port.get("onvifEnable", 1) == 1
                     self._subscribe_url = f"http://{self._host}:{self._onvif_port}/onvif/event_service"
 
@@ -1298,7 +1331,8 @@ class Host:
 
                 elif data["cmd"] == "GetAiState":
                     self._is_ia_enabled[channel] = True
-                    self._ai_detection_states[channel] = {}
+                    self._ai_detection_states[channel]  = {}
+                    self._ai_detection_support[channel] = {}
                     found_channel = False
                     for key, value in data["value"].items():
                         if not found_channel and key == "channel" and value == channel:
@@ -1309,6 +1343,7 @@ class Host:
 
                         if isinstance(value, int):  # compatibility with firmware < 3.0.0-494
                             self._ai_detection_states[channel][key] = value == 1
+                            self._ai_detection_support[channel][key] = True
                         else:
                             # from firmware 3.0.0.0-494 there is a new json structure:
                             # [
@@ -1332,7 +1367,9 @@ class Host:
                             #         }
                             #     }
                             # ]
-                            self._ai_detection_states[channel][key] = value.get('support', 0) == 1 and value.get('alarm_state', 0) == 1
+                            supported: bool = value.get('support', 0) == 1
+                            self._ai_detection_states[channel][key] = supported and value.get('alarm_state', 0) == 1
+                            self._ai_detection_support[channel][key] = supported
 
                 elif data["cmd"] == "GetOsd":
                     self._osd_settings[channel] = data["value"]
@@ -1422,7 +1459,7 @@ class Host:
                 continue
     #endof map_channel_json_response()
 
-    async def set_net_port(self, enable_onvif: bool = None) -> bool:
+    async def set_net_port(self, enable_onvif: bool = None, enable_rtmp: bool = None, enable_rtsp: bool = None) -> bool:
         """Set Network Port parameters on the host (NVR or camera)."""
         if self._netport_settings is None:
             _LOGGER.error("Host %s:%s: NetPort settings are not yet available, run get_host_data first.", self._host, self._port)
@@ -1432,6 +1469,10 @@ class Host:
 
         if enable_onvif is not None:
             body[0]["param"]["NetPort"]["onvifEnable"] = 1 if enable_onvif else 0
+        if enable_rtmp is not None:
+            body[0]["param"]["NetPort"]["rtmpEnable"] = 1 if enable_rtmp else 0
+        if enable_rtsp is not None:
+            body[0]["param"]["NetPort"]["rtspEnable"] = 1 if enable_rtsp else 0
 
         response = await self.send_setting(body)
         self.expire_session() # When changing network port settings, tokens are invalidated.
