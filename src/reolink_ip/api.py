@@ -915,7 +915,7 @@ class Host:
             json_data = json.loads(response)
             self.map_host_json_response(json_data)
         except (TypeError, json.JSONDecodeError) as e:
-            _LOGGER.error("Host %s:%s: error translating host-settings response: %s", self._host, self._port, e)
+            _LOGGER.error("Host %s:%s: error translating host-settings response: %s, data: %s", self._host, self._port, e, response)
             return False
 
         channels_param = {"channel": 0}
