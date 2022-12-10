@@ -25,7 +25,6 @@ MANUFACTURER                    = "Reolink"
 DEFAULT_STREAM                  = "sub"
 DEFAULT_PROTOCOL                = "rtmp"
 DEFAULT_TIMEOUT                 = 60
-DEFAULT_STREAM_FORMAT           = "h264"
 DEFAULT_RTMP_AUTH_METHOD        = 'PASSWORD'
 SUBSCRIPTION_TERMINATION_TIME   = 15
 
@@ -64,7 +63,6 @@ class Host:
         protocol: str                   = DEFAULT_PROTOCOL,
         stream: str                     = DEFAULT_STREAM,
         timeout: int                    = DEFAULT_TIMEOUT,
-        stream_format: str              = DEFAULT_STREAM_FORMAT,
         rtmp_auth_method: str           = DEFAULT_RTMP_AUTH_METHOD,
         aiohttp_get_session_callback    = None):
 
@@ -125,7 +123,6 @@ class Host:
         # Video-stream formats
         self._stream: str           = stream
         self._protocol: str         = protocol
-        self._stream_format: str    = stream_format
         self._rtmp_auth_method: str = rtmp_auth_method
 
         ##############################################################################
@@ -327,14 +324,6 @@ class Host:
     @stream.setter
     def stream(self, value: str):
         self._stream = value
-
-    @property
-    def stream_format(self) -> str:
-        return self._stream_format
-
-    @stream_format.setter
-    def stream_format(self, value: str):
-        self._stream_format = value
 
     @property
     def protocol(self) -> str:
@@ -1095,48 +1084,59 @@ class Host:
     #endof get_snapshot()
 
 
-    def get_rtmp_stream_source(self, channel: int) -> Optional[str]:
+    def get_rtmp_stream_source(self, channel: int, stream: Optional[str] = None) -> Optional[str]:
         if channel not in self._channels:
             return None
 
+        if stream is None:
+            stream = self._stream
+            
         stream_type = None
-        if self._stream == "sub":
+        if stream == "sub":
             stream_type = 1
         else:
             stream_type = 0
         if self._rtmp_auth_method == DEFAULT_RTMP_AUTH_METHOD:
             password = parse.quote(self._password)
-            return f"rtmp://{self._host}:{self._rtmp_port}/bcs/channel{channel}_{self._stream}.bcs?channel={channel}&stream={stream_type}&user={self._username}&password={password}"
+            return f"rtmp://{self._host}:{self._rtmp_port}/bcs/channel{channel}_{stream}.bcs?channel={channel}&stream={stream_type}&user={self._username}&password={password}"
 
-        return f"rtmp://{self._host}:{self._rtmp_port}/bcs/channel{channel}_{self._stream}.bcs?channel={channel}&stream={stream_type}&token={self._token}"
+        return f"rtmp://{self._host}:{self._rtmp_port}/bcs/channel{channel}_{stream}.bcs?channel={channel}&stream={stream_type}&token={self._token}"
     #endof get_rtmp_stream_source()
 
 
-    def get_rtsp_stream_source(self, channel: int) -> Optional[str]:
+    def get_rtsp_stream_source(self, channel: int, stream: Optional[str] = None) -> Optional[str]:
         if channel not in self._channels:
             return None
 
+        if stream is None:
+            stream = self._stream
+
         password = parse.quote(self._password)
         channel = "{:02d}".format(channel + 1)
-        return f"rtsp://{self._username}:{password}@{self._host}:{self._rtsp_port}/{self._stream_format}Preview_{channel}_{self._stream}"
+        return f"rtsp://{self._username}:{password}@{self._host}:{self._rtsp_port}/Preview_{channel}_{stream}"
     #endof get_rtsp_stream_source()
 
 
-    async def get_stream_source(self, channel: int) -> Optional[str]:
+    async def get_stream_source(self, channel: int, stream: Optional[str] = None) -> Optional[str]:
         """Return the stream source url."""
         if not await self.login():
             return None
 
-        if self._protocol == "rtmp":
-            return self.get_rtmp_stream_source(channel)
-        elif self._protocol == "rtsp":
-            return self.get_rtsp_stream_source(channel)
+        if stream is None:
+            stream = self._stream
+
+        if stream != "main" and stream != "sub" and stream != "ext":
+            return None
+        elif self.protocol == "rtmp":
+            return self.get_rtmp_stream_source(channel, stream)
+        elif self.protocol == "rtsp":
+            return self.get_rtsp_stream_source(channel, stream)
         else:
             return None
     #endof get_stream_source()
 
 
-    async def get_vod_source(self, channel: int, filename: str, external_url: bool = False) -> tuple[Optional[str], Optional[str]]:
+    async def get_vod_source(self, channel: int, filename: str, external_url: bool = False, stream: Optional[str] = None) -> tuple[Optional[str], Optional[str]]:
         """Return the VOD source url."""
         if channel not in self._channels:
             return None, None
@@ -1171,8 +1171,11 @@ class Host:
                 else:
                     return "application/x-mpegURL", f"http://{host_url}:{host_port}/cgi-bin/api.cgi?&cmd=Playback&channel={channel}&source={filename}&user={self._username}&password={self._password}"
             else:
+                if stream is None:
+                    stream = self._stream
+
                 stream_type = None
-                if self._stream == "sub":
+                if stream == "sub":
                     stream_type = 1
                 else:
                     stream_type = 0
@@ -2165,10 +2168,13 @@ class Host:
     #endof set_ptz_command()
 
 
-    async def request_vod_files(self, channel: int, start: datetime, end: datetime, status_only: bool = False) -> tuple[list[typings.SearchStatus], Optional[list[typings.SearchFile]]]:
+    async def request_vod_files(self, channel: int, start: datetime, end: datetime, status_only: bool = False, stream: Optional[str] = None) -> tuple[list[typings.SearchStatus], Optional[list[typings.SearchFile]]]:
         """Send search VOD-files command."""
         if channel not in self._channels:
             return None, None
+
+        if stream is None:
+            stream = self._stream
 
         body = [
             {
@@ -2178,7 +2184,7 @@ class Host:
                     "Search": {
                         "channel": channel,
                         "onlyStatus": 1 if status_only else 0,
-                        "streamType": self._stream,
+                        "streamType": stream,
                         "StartTime": {
                             "year": start.year,
                             "mon":  start.month,
