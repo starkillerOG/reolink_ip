@@ -22,7 +22,6 @@ import urllib.parse as parse
 from . import templates
 
 MANUFACTURER                    = "Reolink"
-DEFAULT_USE_SSL                 = False
 DEFAULT_STREAM                  = "sub"
 DEFAULT_PROTOCOL                = "rtmp"
 DEFAULT_TIMEOUT                 = 60
@@ -57,10 +56,10 @@ class Host:
     def __init__(
         self,
         host: str,
-        port: int,
         username: str,
         password: str,
-        use_https: bool                 = DEFAULT_USE_SSL,
+        port: Optional[int]             = None,
+        use_https: Optional[bool]       = None,
         protocol: str                   = DEFAULT_PROTOCOL,
         stream: str                     = DEFAULT_STREAM,
         timeout: int                    = DEFAULT_TIMEOUT,
@@ -73,11 +72,11 @@ class Host:
         ##############################################################################
         # Host
         self._url: str                      = ""
-        self._use_https: bool               = use_https
+        self._use_https: Optional[bool]     = use_https
         self._host: str                     = host
         self._external_host: Optional[str]  = None
         self._external_port: Optional[str]  = None
-        self._port: int                     = port
+        self._port: Optional[int]           = port
         self._rtsp_port: Optional[int]      = None
         self._rtmp_port: Optional[int]      = None
         self._onvif_port: Optional[int]     = None
@@ -221,6 +220,10 @@ class Host:
         self._external_host = value
 
     @property
+    def use_https(self) -> Optional[bool]:
+        return self._use_https
+
+    @property
     def external_port(self) -> Optional[str]:
         return self._external_port
 
@@ -229,7 +232,7 @@ class Host:
         self._external_port = value
 
     @property
-    def port(self) -> int:
+    def port(self) -> Optional[int]:
         return self._port
 
     @property
@@ -567,6 +570,9 @@ class Host:
     # Methods
 
     async def login(self) -> bool:
+        if self._port is None or self._use_https is None:
+            return await self._login_try_ports()
+    
         await self._login_mutex.acquire()
 
         try:
@@ -591,7 +597,10 @@ class Host:
             ]
             param = {"cmd": "Login", "token": "null"}
 
-            response = await self.send(body, param)
+            try:
+                response = await self.send(body, param)
+            except ApiError:
+                return False
             if response is None:
                 _LOGGER.error("Host: %s:%s: error receiving Reolink login response.", self._host, self._port)
                 return False
@@ -625,6 +634,16 @@ class Host:
             self._login_mutex.release()
     #endof login()
 
+    async def _login_try_ports(self) -> bool:
+        self._port = 443
+        self.enable_https(True)
+        if await self.login():
+            return True
+
+        self._port = 80
+        self.enable_https(False)
+        return await self.login()
+    #endof _login_try_ports()
 
     async def logout(self, mutex_owned = False):
         body  = [{"cmd": "Logout", "action": 0, "param": {}}]
@@ -885,7 +904,7 @@ class Host:
             json_data = json.loads(response)
             self.map_host_json_response(json_data)
         except (TypeError, json.JSONDecodeError) as e:
-            _LOGGER.error("Host %s:%s: error translating host-settings response: %s", self._host, self._port, e)
+            _LOGGER.error("Host %s:%s: error translating host-settings response: %s, data:\n%s\n", self._host, self._port, e, response)
             return False
 
         channels_param = {"channel": 0}
@@ -2298,7 +2317,7 @@ class Host:
                             self.expire_session()
                             return await self.send(body, param, expected_content_type, retry = True)
 
-                if response.status >= 400:
+                if response.status >= 400 or (is_login_logout and response.status != 200):
                     raise ApiError("API returned HTTP status ERROR code {}/{}".format(response.status, response.reason))
 
                 if expected_content_type is not None and response.content_type != expected_content_type:
@@ -2330,7 +2349,7 @@ class Host:
                             self.expire_session()
                             return await self.send(body, param, expected_content_type, retry = True)                     
 
-                if response.status >= 400:
+                if response.status >= 400 or (is_login_logout and response.status != 200):
                     raise ApiError("API returned HTTP status ERROR code {}/{}.".format(response.status, response.reason))
 
                 return json_data
