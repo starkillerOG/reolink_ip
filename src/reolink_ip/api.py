@@ -1113,7 +1113,9 @@ class Host:
 
         password = parse.quote(self._password)
         channel = "{:02d}".format(channel + 1)
-        return f"rtsp://{self._username}:{password}@{self._host}:{self._rtsp_port}/Preview_{channel}_{stream}"
+        # Reolink has deprecated the "h264/h265" prefixes, but it still does not work with some cameras without it (e.g. E1 Zoom). So maybe later...
+        #return f"rtsp://{self._username}:{password}@{self._host}:{self._rtsp_port}/Preview_{channel}_{stream}"
+        return f"rtsp://{self._username}:{password}@{self._host}:{self._rtsp_port}/h264Preview_{channel}_{stream}"
     #endof get_rtsp_stream_source()
 
 
