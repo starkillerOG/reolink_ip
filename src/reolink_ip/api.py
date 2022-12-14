@@ -2259,7 +2259,7 @@ class Host:
             _LOGGER.debug("Response from %s:%s: %s", self._host, self._port, json_data)
 
             if json_data[0]["code"] == 0 and json_data[0]["value"]["rspCode"] == 200:
-                if command[:3] == "Get":
+                if command[:3] == "Set":
                     getcmd = command.replace("Set", "Get")
                     await self.get_state(cmd = getcmd)
                 return True
