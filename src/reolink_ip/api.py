@@ -1468,8 +1468,12 @@ class Host:
 
                 elif data["cmd"] == "GetPowerLed":
                     self._power_led_settings[channel] = data["value"]
-                    self._power_led_enabled[channel] = data["value"]["PowerLed"]["state"] == "On"
-                    self._doorbell_light_enabled[channel] = data["value"]["PowerLed"]["eDoorbellLightState"] == "On"
+                    val = data["value"]["PowerLed"].get("state", None)
+                    if val is not None:
+                        self._power_led_enabled[channel] = val == "On"
+                    val = data["value"]["PowerLed"].get("eDoorbellLightState", None)
+                    if val is not None:
+                        self._doorbell_light_enabled[channel] = val == "On"
 
                 elif data["cmd"] == "GetWhiteLed":
                     self._whiteled_settings[channel] = data["value"]
