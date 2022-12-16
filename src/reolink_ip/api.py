@@ -154,6 +154,7 @@ class Host:
         self._ptz_presets_settings: dict[int, dict] = dict()
         self._email_settings: dict[int, dict]       = dict()
         self._ir_settings: dict[int, dict]          = dict()
+        self._power_led_settings: dict[int, dict]   = dict()
         self._whiteled_settings: dict[int, dict]    = dict()
         self._recording_settings: dict[int, dict]   = dict()
         self._alarm_settings: dict[int, dict]       = dict()
@@ -179,6 +180,8 @@ class Host:
         self._push_enabled: dict[int, bool]                   = dict()
         self._audio_enabled: dict[int, bool]                  = dict()
         self._ir_enabled: dict[int, bool]                     = dict()
+        self._power_led_enabled: dict[int, bool]              = dict()
+        self._doorbell_light_enabled: dict[int, bool]         = dict()
         self._whiteled_enabled: dict[int, bool]               = dict()
         self._whiteled_modes: dict[int, int]                  = dict()
         self._daynight_state: dict[int, str]                  = dict()
@@ -421,6 +424,12 @@ class Host:
 
     def ir_enabled(self, channel: int) -> bool:
         return self._ir_enabled is not None and channel in self._ir_enabled and self._ir_enabled[channel]
+
+    def power_led_enabled(self, channel: int) -> bool:
+        return self._power_led_enabled is not None and channel in self._power_led_enabled and self._power_led_enabled[channel]
+
+    def doorbell_light_enabled(self, channel: int) -> bool:
+        return self._doorbell_light_enabled is not None and channel in self._doorbell_light_enabled and self._doorbell_light_enabled[channel]
 
     def whiteled_enabled(self, channel: int) -> bool:
         return self._whiteled_enabled is not None and channel in self._whiteled_enabled and self._whiteled_enabled[channel]
@@ -699,6 +708,12 @@ class Host:
         if self._ir_enabled is not None and channel in self._ir_enabled and self._ir_enabled[channel] is not None:
             capabilities.append("irLights")
 
+        if self._power_led_enabled is not None and channel in self._power_led_enabled and self._power_led_enabled[channel] is not None:
+            capabilities.append("powerLed")
+
+        if self._doorbell_light_enabled is not None and channel in self._doorbell_light_enabled and self._doorbell_light_enabled[channel] is not None:
+            capabilities.append("doorbellLight")
+
         if self._whiteled_enabled is not None and channel in self._whiteled_enabled and self._whiteled_enabled[channel] is not None:
             capabilities.append("spotlight")
 
@@ -746,6 +761,8 @@ class Host:
             body = [{"cmd": "GetIsp", "action": 0, "param": channels_param}]
         elif cmd == "GetIrLights":
             body = [{"cmd": "GetIrLights", "action": 0, "param": channels_param}]
+        elif cmd == "GetPowerLed":
+            body = [{"cmd": "GetPowerLed", "action": 0, "param": channels_param}]
         elif cmd == "GetWhiteLed":
             body = [{"cmd": "GetWhiteLed", "action": 0, "param": channels_param}]
         elif cmd == "GetPtzPreset":
@@ -819,6 +836,7 @@ class Host:
             {"cmd": "GetEnc", "action": 0, "param": channels_param},
             {"cmd": "GetIsp", "action": 0, "param": channels_param},
             {"cmd": "GetIrLights", "action": 0, "param": channels_param},
+            {"cmd": "GetPowerLed", "action": 0, "param": channels_param},
             {"cmd": "GetWhiteLed", "action": 0, "param": channels_param},
             {"cmd": "GetPtzPreset", "action": 0, "param": channels_param},
             {"cmd": "GetAutoFocus", "action": 0, "param": channels_param},
@@ -1448,6 +1466,11 @@ class Host:
                     self._ir_settings[channel] = data["value"]
                     self._ir_enabled[channel] = data["value"]["IrLights"]["state"] == "Auto"
 
+                elif data["cmd"] == "GetPowerLed":
+                    self._power_led_settings[channel] = data["value"]
+                    self._power_led_enabled[channel] = data["value"]["PowerLed"]["state"] == "On"
+                    self._doorbell_light_enabled[channel] = data["value"]["PowerLed"]["eDoorbellLightState"] == "On"
+
                 elif data["cmd"] == "GetWhiteLed":
                     self._whiteled_settings[channel] = data["value"]
                     self._whiteled_enabled[channel] = data["value"]["WhiteLed"]["state"] == 1
@@ -1879,6 +1902,21 @@ class Host:
 
         return await self.send_setting(body)
     #endof set_ir_lights()
+
+
+    async def set_power_led(self, channel: int, state: bool, doorbellLightState: bool) -> bool:
+        if channel not in self._channels:
+            return False
+        if self._power_led_settings is None or channel not in self._power_led_settings or not self._power_led_settings[channel]:
+            _LOGGER.error("Power led on camera %s is not available.", self.camera_name(channel))
+            return False
+
+        body = [{"cmd": "SetPowerLed", "action": 0, "param": {"PowerLed": {"channel": channel, "state": "dummy", "eDoorbellLightState": "dummy"}}}]
+        body[0]["param"]["PowerLed"]["state"] = "On" if state else "Off"
+        body[0]["param"]["PowerLed"]["eDoorbellLightState"] = "On" if doorbellLightState else "Off"
+
+        return await self.send_setting(body)
+    #endof set_power_led()
 
 
     async def set_whiteled(self, channel: int, enable: bool, brightness, mode = None) -> bool:
