@@ -1472,7 +1472,7 @@ class Host:
                     if val is not None:
                         self._power_led_enabled[channel] = val == "On"
                     val = data["value"]["PowerLed"].get("eDoorbellLightState", None)
-                    if val is not None:
+                    if val is not None and val != "NotSupport":
                         self._doorbell_light_enabled[channel] = val == "On"
 
                 elif data["cmd"] == "GetWhiteLed":
