@@ -2043,7 +2043,7 @@ class Host:
             {"cmd": "AudioAlarmPlay",
                 "action": 0,
                 "param": {
-                    "alarm_mode": "manual",
+                    "alarm_mode": "manu",
                     "manual_switch": 1 if enable else 0,
                     "times": 2,
                     "channel": channel
