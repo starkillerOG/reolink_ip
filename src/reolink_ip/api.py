@@ -610,6 +610,8 @@ class Host:
                 response = await self.send(body, param)
             except ApiError:
                 return False
+            except aiohttp.ClientConnectorError as e:
+                return False
             if response is None:
                 _LOGGER.error("Host: %s:%s: error receiving Reolink login response.", self._host, self._port)
                 return False
