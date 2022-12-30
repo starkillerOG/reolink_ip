@@ -2374,10 +2374,15 @@ class Host:
                             raise CredentialsInvalidError()
                         _LOGGER.debug("Host %s:%s: \"invalid login\" response, trying to login again and retry the command.", self._host, self._port)
                         self.expire_session()
-                        return await self.send(body, param, expected_content_type, retry = True)                     
+                        return await self.send(body, param, expected_content_type, retry = True)
 
             if expected_content_type is not None and response.content_type != expected_content_type:
                 raise InvalidContentTypeError("Expected type '{}' but received '{}'.".format(expected_content_type, response.content_type))
+
+            if response.status == 502 and not retry:
+                _LOGGER.debug("Host %s:%s: 502/Bad Gateway response, trying to login again and retry the command.", self._host, self._port)
+                self.expire_session()
+                return await self.send(body, param, expected_content_type, retry = True)
 
             if response.status >= 400 or (is_login_logout and response.status != 200):
                 raise ApiError("API returned HTTP status ERROR code {}/{}.".format(response.status, response.reason))
