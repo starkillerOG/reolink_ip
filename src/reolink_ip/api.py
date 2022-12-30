@@ -2343,62 +2343,46 @@ class Host:
                 async with self._send_mutex:
                     response = await session.get(url = self._url, params = param, allow_redirects = False)
 
-                _LOGGER.debug("%s/%s:%s::send() HTTP Request params =\n%s\n", self.nvr_name, self._host, self._port, str(param).replace(self._password, "<password>"))
-                _LOGGER.debug("%s/%s:%s::send() HTTP Response status = %s, content-type = (%s).", self.nvr_name, self._host, self._port, response.status, response.content_type)
-
                 json_data = await response.read()
-                if param.get("cmd") == "Snap":
-                    _LOGGER_DATA.debug("%s/%s:%s::send() HTTP Response (snapshot) data scrapped because it's too large.", self.nvr_name, self._host, self._port)
-                else:
-                    _LOGGER_DATA.debug("%s/%s:%s::send() HTTP Response data:\n%s\n", self.nvr_name, self._host, self._port, json_data)
-
-                if len(json_data) < 500 and response.content_type == 'text/html':
-                    if b'"detail" : "invalid user"' in json_data or b'"detail" : "login failed"' in json_data or b'detail" : "please login first' in json_data:
-                        if is_login_logout:
-                            raise CredentialsInvalidError()
-                        else:
-                            if retry:
-                                raise CredentialsInvalidError()
-                            _LOGGER.debug("Host %s:%s: \"invalid login\" response, trying to login again and retry the command.", self._host, self._port)
-                            self.expire_session()
-                            return await self.send(body, param, expected_content_type, retry = True)
-
-                if response.status >= 400 or (is_login_logout and response.status != 200):
-                    raise ApiError("API returned HTTP status ERROR code {}/{}".format(response.status, response.reason))
-
-                if expected_content_type is not None and response.content_type != expected_content_type:
-                    raise InvalidContentTypeError("Expected type '{}' but received '{}'.".format(expected_content_type, response.content_type))
-
-                return json_data
             else:
                 async with self._send_mutex:
                     response = await session.post(url = self._url, json = body, params = param, allow_redirects = False)
 
-                _LOGGER.debug("%s/%s:%s::send() HTTP Request params =\n%s\n", self.nvr_name, self._host, self._port, str(param).replace(self._password, "<password>"))
-                _LOGGER.debug("%s/%s:%s::send() HTTP Request body =\n%s\n", self.nvr_name, self._host, self._port, str(body).replace(self._password, "<password>"))
-                _LOGGER.debug("%s/%s:%s::send() HTTP Response status = %s, content-type = (%s).", self.nvr_name, self._host, self._port, response.status, response.content_type)
-
                 json_data = await response.text()
-                if param.get("cmd") == "Search" and len(json_data) > 500:
-                    _LOGGER_DATA.debug("%s/%s:%s::send() HTTP Response (VOD search) data scrapped because it's too large.", self.nvr_name, self._host, self._port)
+
+            _LOGGER.debug("%s/%s:%s::send() HTTP Request params =\n%s\n", self.nvr_name, self._host, self._port, str(param).replace(self._password, "<password>"))
+            _LOGGER.debug("%s/%s:%s::send() HTTP Response status = %s, content-type = (%s).", self.nvr_name, self._host, self._port, response.status, response.content_type)
+            if body is not None:
+                _LOGGER.debug("%s/%s:%s::send() HTTP Request body =\n%s\n", self.nvr_name, self._host, self._port, str(body).replace(self._password, "<password>"))
+            if param.get("cmd") == "Search" and len(json_data) > 500:
+                _LOGGER_DATA.debug("%s/%s:%s::send() HTTP Response (VOD search) data scrapped because it's too large.", self.nvr_name, self._host, self._port)
+            elif param.get("cmd") == "Snap":
+                _LOGGER_DATA.debug("%s/%s:%s::send() HTTP Response (snapshot) data scrapped because it's too large.", self.nvr_name, self._host, self._port)
+            else:
+                _LOGGER_DATA.debug("%s/%s:%s::send() HTTP Response data:\n%s\n", self.nvr_name, self._host, self._port, json_data)
+
+            if len(json_data) < 500 and response.content_type == 'text/html':
+                if body is None:
+                    err = b'"detail" : "invalid user"' in json_data or b'"detail" : "login failed"' in json_data or b'detail" : "please login first' in json_data
                 else:
-                    _LOGGER_DATA.debug("%s/%s:%s::send() HTTP Response data:\n%s\n", self.nvr_name, self._host, self._port, json_data)
-
-                if len(json_data) < 500 and response.content_type == 'text/html':
-                    if ('"detail" : "invalid user"' in json_data or '"detail" : "login failed"' in json_data or 'detail" : "please login first' in json_data) and body[0]["cmd"] != "Logout":
-                        if is_login_logout:
+                    err = ('"detail" : "invalid user"' in json_data or '"detail" : "login failed"' in json_data or 'detail" : "please login first' in json_data) and body[0]["cmd"] != "Logout"
+                if err:
+                    if is_login_logout:
+                        raise CredentialsInvalidError()
+                    else:
+                        if retry:
                             raise CredentialsInvalidError()
-                        else:
-                            if retry:
-                                raise CredentialsInvalidError()
-                            _LOGGER.debug("Host %s:%s: \"invalid login\" response, trying to login again and retry the command.", self._host, self._port)
-                            self.expire_session()
-                            return await self.send(body, param, expected_content_type, retry = True)                     
+                        _LOGGER.debug("Host %s:%s: \"invalid login\" response, trying to login again and retry the command.", self._host, self._port)
+                        self.expire_session()
+                        return await self.send(body, param, expected_content_type, retry = True)                     
 
-                if response.status >= 400 or (is_login_logout and response.status != 200):
-                    raise ApiError("API returned HTTP status ERROR code {}/{}.".format(response.status, response.reason))
+            if expected_content_type is not None and response.content_type != expected_content_type:
+                raise InvalidContentTypeError("Expected type '{}' but received '{}'.".format(expected_content_type, response.content_type))
 
-                return json_data
+            if response.status >= 400 or (is_login_logout and response.status != 200):
+                raise ApiError("API returned HTTP status ERROR code {}/{}.".format(response.status, response.reason))
+
+            return json_data
         except aiohttp.ClientConnectorError as e:
             self.expire_session()
             _LOGGER.error("Host %s:%s: connection error: %s", self._host, self._port, str(e))
