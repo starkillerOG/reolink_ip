@@ -604,24 +604,22 @@ class Host:
                     },
                 }
             ]
-            param = {"cmd": "Login", "token": "null"}
+            param = {"cmd": "Login"}
 
             try:
-                response = await self.send(body, param)
+                json_data = await self.send(body, param, expected_content_type = 'json')
             except ApiError:
                 return False
             except aiohttp.ClientConnectorError:
                 return False
-            if response is None:
+            except InvalidContentTypeError:
+                _LOGGER.error("Host %s:%s: error translating login response.", self._host, self._port)
+                return False
+            if json_data is None:
                 _LOGGER.error("Host: %s:%s: error receiving Reolink login response.", self._host, self._port)
                 return False
 
-            try:
-                json_data = json.loads(response)
-                _LOGGER.debug("Got login response from %s:%s: %s", self._host, self._port, json_data)
-            except (TypeError, json.JSONDecodeError) as e:
-                _LOGGER.error("Host %s:%s: error translating login response: %s", self._host, self._port, e)
-                return False
+            _LOGGER.debug("Got login response from %s:%s: %s", self._host, self._port, json_data)
 
             if json_data is not None:
                 try:
@@ -664,7 +662,7 @@ class Host:
 
         try:
             if self._token:
-                param = {"cmd": "Logout", "token": self._token}
+                param = {"cmd": "Logout"}
                 await self.send(body, param)
             # Reolink has a bug in some cameras' firmware: the Logout command issued without a token breaks the subsequent commands:
             # even if Login command issued AFTER that successfully returns a token, any command with that token would return "Please login first" error.
@@ -814,18 +812,16 @@ class Host:
                 alarm_param["channel"]      = c
                 channels_param["channel"]   = c
 
-                response = await self.send(body)
-                if response is None:
+                try:
+                    json_data = await self.send(body, expected_content_type = 'json')
+                except InvalidContentTypeError:
+                    _LOGGER.error("Host: %s:%s: error translating channel-state response for channel %s.", self._host, self._port, c)
+                    return False
+                if json_data is None:
                     _LOGGER.error("Host: %s:%s: error obtaining channel-state response for channel %s.", self._host, self._port, c)
-                    self.expire_session()
                     return False
 
-                try:
-                    json_data = json.loads(response)
-                    self.map_channel_json_response(json_data, c)
-                except (TypeError, json.JSONDecodeError) as e:
-                    _LOGGER.error("Host: %s:%s: error translating channel-state response for channel %s: %s", self._host, self._port, c, e)
-                    return False
+                self.map_channel_json_response(json_data, c)
         return True
     #endof get_state()
 
@@ -880,18 +876,16 @@ class Host:
             alarm_param["channel"]      = c
             channels_param["channel"]   = c
 
-            response = await self.send(body)
-            if response is None:
+            try:
+                json_data = await self.send(body, expected_content_type = 'json')
+            except InvalidContentTypeError:
+                _LOGGER.error("Host: %s:%s: error translating channel-state response for channel %s.", self._host, self._port, c)
+                return False
+            if json_data is None:
                 _LOGGER.error("Host: %s:%s: error obtaining channel-state response for channel %s.", self._host, self._port, c)
-                self.expire_session()
                 return False
 
-            try:
-                json_data = json.loads(response)
-                self.map_channel_json_response(json_data, c)
-            except (TypeError, json.JSONDecodeError) as e:
-                _LOGGER.error("Host: %s:%s: error translating channel-state response for channel %s: %s", self._host, self._port, c, e)
-                return False
+            self.map_channel_json_response(json_data, c)
         return True
     #endof get_states()
 
@@ -914,18 +908,16 @@ class Host:
             }
         ]
 
-        response = await self.send(body)
-        if response is None:
+        try:
+            json_data = await self.send(body, expected_content_type = 'json')
+        except InvalidContentTypeError:
+            _LOGGER.error("Host %s:%s: error translating host-settings response.", self._host, self._port)
+            return False
+        if json_data is None:
             _LOGGER.error("Host: %s:%s: error obtaining host-settings response.", self._host, self._port)
-            self.expire_session()
             return False
 
-        try:
-            json_data = json.loads(response)
-            self.map_host_json_response(json_data)
-        except (TypeError, json.JSONDecodeError) as e:
-            _LOGGER.error("Host %s:%s: error translating host-settings response: %s, data:\n%s\n", self._host, self._port, e, response)
-            return False
+        self.map_host_json_response(json_data)
 
         channels_param = {"channel": 0}
         channel_level_body = [
@@ -947,18 +939,16 @@ class Host:
         for c in self._channels:
             channels_param["channel"] = c
 
-            response = await self.send(channel_level_body)
-            if response is None:
+            try:
+                json_data = await self.send(channel_level_body, expected_content_type = 'json')
+            except InvalidContentTypeError:
+                _LOGGER.error("Host %s:%s: error translating API response for channel %s.", self._host, self._port, c)
+                return False
+            if json_data is None:
                 _LOGGER.error("Host: %s:%s: error obtaining API response for channel %s.", self._host, self._port, c)
-                self.expire_session()
                 return False
 
-            try:
-                json_data = json.loads(response)
-                self.map_channel_json_response(json_data, c)
-            except (TypeError, json.JSONDecodeError) as e:
-                _LOGGER.error("Host %s:%s: error translating API response for channel %s: %s", self._host, self._port, c, e)
-                return False
+            self.map_channel_json_response(json_data, c)
 
             # Let's assume all channels of an NVR or multichannel-camera always have the same versions of commands... Not sure though...
             if versions_check:
@@ -1000,24 +990,18 @@ class Host:
 
         body = [{"cmd": "GetMdState", "action": 0, "param": {"channel": channel}}]
 
-        response = await self.send(body)
-        if response is None:
-            _LOGGER.error("Host %s:%s: error obtaining motion state response for channel %s.", self._host, self._port, channel)
-            self.expire_session()
-            self._motion_detection_states[channel] = False
-            return self._motion_detection_states[channel]
-
         try:
-            json_data = json.loads(response)
-            if json_data is None:
-                _LOGGER.error("Host %s:%s: unable to get motion detection state for channel %s.", self._host, self._port, channel)
-                self._motion_detection_states[channel] = False
-                return self._motion_detection_states[channel]
-
-            self.map_channel_json_response(json_data, channel)
-        except (TypeError, json.JSONDecodeError) as e:
-            _LOGGER.error("Host %s:%s: error translating motion detection state response for channel %s: %s", self._host, self._port, channel, e)
+            json_data = await self.send(body, expected_content_type = 'json')
+        except InvalidContentTypeError:
+            _LOGGER.error("Host %s:%s: error translating motion detection state response for channel %s.", self._host, self._port, channel)
             self._motion_detection_states[channel] = False
+            return False
+        if json_data is None:
+            _LOGGER.error("Host %s:%s: error obtaining motion state response for channel %s.", self._host, self._port, channel)
+            self._motion_detection_states[channel] = False
+            return False
+
+        self.map_channel_json_response(json_data, channel)
 
         return None if self._motion_detection_states is None or channel not in self._motion_detection_states or self._motion_detection_states[channel] is None else self._motion_detection_states[channel]
     #endof get_motion_state()
@@ -1029,25 +1013,18 @@ class Host:
 
         body = [{"cmd": "GetAiState", "action": 0, "param": {"channel": channel}}]
 
-        response = await self.send(body)
-        if response is None:
-            _LOGGER.error("Host %s:%s: error obtaining AI detection state response for channel %s.", self._host, self._port, channel)
-            self.expire_session()
-            self._ai_detection_states[channel] = None
-            return self._ai_detection_states[channel]
-
         try:
-            json_data = json.loads(response)
-
-            if json_data is None:
-                _LOGGER.error("Host %s:%s: unable to get AI detection state for channel %s.", self._host, self._port, channel)
-                self._ai_detection_states[channel] = None
-                return self._ai_detection_states[channel]
-
-            self.map_channel_json_response(json_data, channel)
-        except (TypeError, json.JSONDecodeError) as e:
-            _LOGGER.error("Host %s:%s: error translating AI detection state response for channel %s: %s", self._host, self._port, channel, e)
+            json_data = await self.send(body, expected_content_type = 'json')
+        except InvalidContentTypeError:
+            _LOGGER.error("Host %s:%s: error translating AI detection state response for channel %s.", self._host, self._port, channel)
             self._ai_detection_states[channel] = None
+            return None
+        if json_data is None:
+            _LOGGER.error("Host %s:%s: error obtaining AI detection state response for channel %s.", self._host, self._port, channel)
+            self._ai_detection_states[channel] = None
+            return None
+
+        self.map_channel_json_response(json_data, channel)
 
         return None if self._ai_detection_states is None or channel not in self._ai_detection_states or self._ai_detection_states[channel] is None else self._ai_detection_states[channel]
     #endof get_ai_state()
@@ -1061,27 +1038,20 @@ class Host:
         body = [{"cmd": "GetMdState", "action": 0, "param": {"channel": channel}},
                 {"cmd": "GetAiState", "action": 0, "param": {"channel": channel}}]
 
-        response = await self.send(body)
-        if response is None:
+        try:
+            json_data = await self.send(body, expected_content_type = 'json')
+        except InvalidContentTypeError:
+            _LOGGER.error("Host %s:%s: error translating All Motion States response for channel %s.", self._host, self._port, channel)
+            self._motion_detection_states[channel] = False
+            self._ai_detection_states[channel] = None
+            return False
+        if json_data is None:
             _LOGGER.error("Host %s:%s: error obtaining All Motion States response for channel %s.", self._host, self._port, channel)
-            self.expire_session()
             self._motion_detection_states[channel] = False
             self._ai_detection_states[channel] = None
             return False
 
-        try:
-            json_data = json.loads(response)
-            if json_data is None:
-                _LOGGER.error("Host %s:%s: unable to get All Motion States for channel %s.", self._host, self._port, channel)
-                self._motion_detection_states[channel] = False
-                self._ai_detection_states[channel] = None
-                return False
-
-            self.map_channel_json_response(json_data, channel)
-        except (TypeError, json.JSONDecodeError) as e:
-            _LOGGER.error("Host %s:%s: error translating All Motion States response for channel %s: %s", self._host, self._port, channel, e)
-            self._motion_detection_states[channel] = False
-            self._ai_detection_states[channel] = None
+        self.map_channel_json_response(json_data, channel)
 
         return None if self._motion_detection_states is None or channel not in self._motion_detection_states or self._motion_detection_states[channel] is None else self._motion_detection_states[channel]
     #endof get_all_motion_states()
@@ -2252,24 +2222,17 @@ class Host:
             }
         ]
 
-        # response = await self.send(body, {"cmd": "Search", "rs": "000000", "user": self._username, "password": self._password})
-        # response = await self.send(body, {"cmd": "Search", "user": self._username, "password": self._password})
-        response = await self.send(body, {"cmd": "Search", "token": self._token})
-        if response is None:
+        try:
+            # json_data = await self.send(body, {"cmd": "Search", "rs": "000000"}, expected_content_type = 'json')
+            json_data = await self.send(body, {"cmd": "Search"}, expected_content_type = 'json')
+        except InvalidContentTypeError:
+            _LOGGER.error("Host %s:%s: error translating of \"Search\" command response.", self._host, self._port)
+            return None, None
+        if json_data is None:
             _LOGGER.error("Host %s:%s: error receiving response for \"Search\" command.", self._host, self._port)
-            self.expire_session()
             return None, None
 
         try:
-            json_data = json.loads(response)
-        except (TypeError, json.JSONDecodeError) as e:
-            _LOGGER.error("Host %s:%s: error translating of \"Search\" command response to json: %s", self._host, self._port, e)
-            return None, None
-        except KeyError as e:
-            _LOGGER.error("Host %s:%s: received an unexpected response while sending \"Search\" command: %s", self._host, self._port, e)
-            return None, None
-
-        if json_data is not None:
             if json_data[0]["code"] == 0:
                 search_result = json_data[0]["value"]["SearchResult"]
                 if status_only or "File" not in search_result:
@@ -2281,8 +2244,8 @@ class Host:
                     return search_result["Status"], search_result["File"]
             else:
                 _LOGGER.info("Host: %s:%s: the \"Search\" command returned error code %s:\n%s\n", self._host, self._port, json_data[0]["code"], json_data)
-        else:
-            _LOGGER.info("Host: %s:%s: failed to get results for \"Search\" command, JSON data was empty.", self._host, self._port)
+        except KeyError as e:
+            _LOGGER.error("Host %s:%s: received an unexpected response from \"Search\" command: %s", self._host, self._port, e)
 
         return None, None
     #endof request_vod_files()
@@ -2292,26 +2255,25 @@ class Host:
         command = body[0]["cmd"]
         _LOGGER.debug("Sending command: \"%s\" to: %s:%s with body: %s", command, self._host, self._port, body)
 
-        response = await self.send(body, {"cmd": command})
-        if response is None:
+        try:
+            json_data = await self.send(body, {"cmd": command}, expected_content_type = 'json')
+        except InvalidContentTypeError:
+            _LOGGER.error("Host %s:%s: error translating command \"%s\" response.", self._host, self._port, command)
+            return False
+        if json_data is None:
             _LOGGER.error("Host %s:%s: error receiving response for command \"%s\".", self._host, self._port, command)
-            self.expire_session()
             return False
 
+        _LOGGER.debug("Response from %s:%s: %s", self._host, self._port, json_data)
+        
         try:
-            json_data = json.loads(response)
-            _LOGGER.debug("Response from %s:%s: %s", self._host, self._port, json_data)
-
             if json_data[0]["code"] == 0 and json_data[0]["value"]["rspCode"] == 200:
                 if command[:3] == "Set":
                     getcmd = command.replace("Set", "Get")
                     await self.get_state(cmd = getcmd)
                 return True
-        except (TypeError, json.JSONDecodeError) as e:
-            _LOGGER.error("Host %s:%s: error translating command \"%s\" response to json: %s", self._host, self._port, command, e)
-            return False
         except KeyError as e:
-            _LOGGER.error("Host %s:%s: received an unexpected response while sending command \"%s\": %s", self._host, self._port, command, e)
+            _LOGGER.error("Host %s:%s: received an unexpected response from command \"%s\": %s", self._host, self._port, command, e)
             return False
 
         _LOGGER.error("Host %s:%s: command \"%s\" error.", self._host, self._port, command)
@@ -2319,22 +2281,28 @@ class Host:
     #endof send_setting()
 
 
-    async def send(self, body, param = None, expected_content_type: Optional[str] = None, retry: bool = False) -> Optional[list]:
+    async def send(self, body: Optional[list], param: Optional[dict] = None, expected_content_type: Optional[str] = None, retry: bool = False) -> Optional[list]:
         """Generic send method."""
 
         if self._aiohttp_session is not None and self._aiohttp_session.closed:
             self._aiohttp_session = aiohttp.ClientSession(timeout=self._timeout, connector=aiohttp.TCPConnector(ssl=SSL_CONTEXT))
 
-        cur_command = param.get("cmd")
-
-        is_login_logout = body is not None and (cur_command == "Login" or cur_command == "Logout")
+        if body is None:
+            cur_command = "" if param is None else param.get("cmd", "")
+            is_login_logout = False
+        else:
+            cur_command = "" if len(body) == 0 else body[0].get("cmd", "")
+            is_login_logout = cur_command == "Login" or cur_command == "Logout"
+            
         if not is_login_logout:
             if not await self.login():
                 return None
 
         if not param:
             param = {}
-        if self._token is not None:
+        if cur_command == "Login":
+            param["token"] = "null"
+        elif self._token is not None:
             param["token"] = self._token
 
         try:
@@ -2348,29 +2316,29 @@ class Host:
                 async with self._send_mutex:
                     response = await session.get(url = self._url, params = param, allow_redirects = False)
 
-                json_data = await response.read()
+                data = await response.read()
             else:
                 _LOGGER.debug("%s/%s:%s::send() HTTP Request body =\n%s\n", self.nvr_name, self._host, self._port, str(body).replace(self._password, "<password>"))
 
                 async with self._send_mutex:
                     response = await session.post(url = self._url, json = body, params = param, allow_redirects = False)
 
-                json_data = await response.text()
+                data = await response.text()
 
             _LOGGER.debug("%s/%s:%s::send() HTTP Response status = %s, content-type = (%s).", self.nvr_name, self._host, self._port, response.status, response.content_type)
 
-            if cur_command == "Search" and len(json_data) > 500:
+            if cur_command == "Search" and len(data) > 500:
                 _LOGGER_DATA.debug("%s/%s:%s::send() HTTP Response (VOD search) data scrapped because it's too large.", self.nvr_name, self._host, self._port)
             elif cur_command == "Snap":
                 _LOGGER_DATA.debug("%s/%s:%s::send() HTTP Response (snapshot) data scrapped because it's too large.", self.nvr_name, self._host, self._port)
             else:
-                _LOGGER_DATA.debug("%s/%s:%s::send() HTTP Response data:\n%s\n", self.nvr_name, self._host, self._port, json_data)
+                _LOGGER_DATA.debug("%s/%s:%s::send() HTTP Response data:\n%s\n", self.nvr_name, self._host, self._port, data)
 
-            if len(json_data) < 500 and response.content_type == 'text/html':
+            if len(data) < 500 and response.content_type == 'text/html':
                 if body is None:
-                    login_err = b'"detail" : "invalid user"' in json_data or b'"detail" : "login failed"' in json_data or b'detail" : "please login first' in json_data
+                    login_err = b'"detail" : "invalid user"' in data or b'"detail" : "login failed"' in data or b'detail" : "please login first' in data
                 else:
-                    login_err = ('"detail" : "invalid user"' in json_data or '"detail" : "login failed"' in json_data or 'detail" : "please login first' in json_data) and cur_command != "Logout"
+                    login_err = ('"detail" : "invalid user"' in data or '"detail" : "login failed"' in data or 'detail" : "please login first' in data) and cur_command != "Logout"
                 if login_err:
                     if is_login_logout:
                         raise CredentialsInvalidError()
@@ -2379,15 +2347,24 @@ class Host:
                             raise CredentialsInvalidError()
                         _LOGGER.debug("Host %s:%s: \"invalid login\" response, trying to login again and retry the command.", self._host, self._port)
                         self.expire_session()
-                        return await self.send(body, param, expected_content_type, retry = True)                     
+                        return await self.send(body, param, expected_content_type, True)                     
 
-            if expected_content_type is not None and response.content_type != expected_content_type:
+            if expected_content_type not in [None, 'json'] and response.content_type != expected_content_type:
                 raise InvalidContentTypeError("Expected type '{}' but received '{}'.".format(expected_content_type, response.content_type))
 
             if response.status >= 400 or (is_login_logout and response.status != 200):
                 raise ApiError("API returned HTTP status ERROR code {}/{}.".format(response.status, response.reason))
 
-            return json_data
+            if expected_content_type == 'json':
+                try:
+                    json_data = json.loads(data)
+                except (TypeError, json.JSONDecodeError) as e:
+                    raise InvalidContentTypeError("Error translating JSON response: {},  content type '{}', data:\n{}\n".format(str(e), response.content_type, data))
+                if json_data is None:
+                    self.expire_session()
+                return json_data
+
+            return data
         except aiohttp.ClientConnectorError as e:
             self.expire_session()
             _LOGGER.error("Host %s:%s: connection error: %s", self._host, self._port, str(e))
@@ -2410,7 +2387,7 @@ class Host:
             raise e
         except Exception as e:
             self.expire_session()
-            _LOGGER.error("Host %s:%s: Unknown exception \"%s\" occurred, traceback:\n%s\n", self._host, self._port, str(e), traceback.format_exc())
+            _LOGGER.error("Host %s:%s: unknown exception \"%s\" occurred, traceback:\n%s\n", self._host, self._port, str(e), traceback.format_exc())
             raise e
     #endof send()
 
