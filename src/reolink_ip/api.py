@@ -187,9 +187,11 @@ class Host:
         self._daynight_state: dict[int, str]                  = dict()
         self._backlight_state: dict[int, str]                 = dict()
         self._ai_detection_states: dict[int, dict[str, bool]] = dict()
+        self._visitor_states: dict[int, bool]                 = dict()
 
         ##############################################################################
         # API-versions of commands
+        self._api_version_getevents: Optional[int]  = 0
         self._api_version_getemail: Optional[int]   = None
         self._api_version_getrec: Optional[int]     = None
         self._api_version_getftp: Optional[int]     = None
@@ -921,7 +923,8 @@ class Host:
         channels = []
         for channel in self._channels:
             ch_body = [
-                {"cmd": "GetAiState", "action": 0, "param": {"channel": channel}}  # to capture AI capabilities
+                {"cmd": "GetAiState", "action": 0, "param": {"channel": channel}},  # to capture AI capabilities
+                {"cmd": "GetEvents", "action": 0, "param": {"channel": channel}},
             ]
             # checking API versions (because Reolink dev quality sucks big time we cannot fully trust GetAbility)
             if self._api_version_getemail >= 1:
@@ -955,6 +958,11 @@ class Host:
                 if x["cmd"] == cmd:
                     return True
             return False
+
+        if check_command_exists("GetEvents"):
+            self._api_version_getevents = 1
+        else:
+            self._api_version_getevents = 0
 
         if self._api_version_getemail >= 1:
             if not check_command_exists("GetEmailV20"):
@@ -1027,12 +1035,15 @@ class Host:
 
 
     async def get_all_motion_states(self, channel: int) -> Optional[bool]:
-        """Fetch All motions states at once (regular + AI)."""
+        """Fetch All motions states at once (regular + AI + visitor)."""
         if channel not in self._channels:
             return None
 
-        body = [{"cmd": "GetMdState", "action": 0, "param": {"channel": channel}},
-                {"cmd": "GetAiState", "action": 0, "param": {"channel": channel}}]
+        if self._api_version_getevents >= 1:
+            body = [{"cmd": "GetEvents", "action": 0, "param": {"channel": channel}}]
+        else:
+            body = [{"cmd": "GetMdState", "action": 0, "param": {"channel": channel}},
+                    {"cmd": "GetAiState", "action": 0, "param": {"channel": channel}}]
 
         try:
             json_data = await self.send(body, expected_content_type = 'json')
@@ -1058,8 +1069,11 @@ class Host:
         body = []
         channels = []
         for channel in self._channels:
-            ch_body = [{"cmd": "GetMdState", "action": 0, "param": {"channel": channel}},
-                       {"cmd": "GetAiState", "action": 0, "param": {"channel": channel}}]
+            if self._api_version_getevents >= 1:
+                ch_body = [{"cmd": "GetEvents", "action": 0, "param": {"channel": channel}}]
+            else:
+                ch_body = [{"cmd": "GetMdState", "action": 0, "param": {"channel": channel}},
+                           {"cmd": "GetAiState", "action": 0, "param": {"channel": channel}}]
             body.extend(ch_body)
             channels.extend([channel]*len(ch_body))
 
@@ -1376,7 +1390,7 @@ class Host:
             return
 
         for data, channel in zip(json_data, channels):
-            self.map_channel_json_response(json_data, channel)
+            self.map_channel_json_response([data], channel)
 
     def map_channel_json_response(self, json_data, channel: int):
         """Map the JSON objects to internal cache-objects."""
@@ -1385,7 +1399,26 @@ class Host:
                 if data["code"] == 1:  # -->Error, like "ability error"
                     continue
 
-                if data["cmd"] == "GetMdState":
+                if data["cmd"] == "GetEvents":
+                    if data["value"]["channel"] != channel:
+                        continue
+                    if "ai" in data["value"]:
+                        self._is_ia_enabled[channel] = True
+                        self._ai_detection_states[channel]  = {}
+                        self._ai_detection_support[channel] = {}
+                        for key, value in data["value"]["ai"].items():
+                            supported: bool = value.get('support', 0) == 1
+                            self._ai_detection_states[channel][key] = supported and value.get('alarm_state', 0) == 1
+                            self._ai_detection_support[channel][key] = supported
+                    if "md" in data["value"]:
+                        self._motion_detection_states[channel] = data["value"]["md"]["alarm_state"] == 1
+                    if "visitor" in data["value"]:
+                        value = data["value"]["visitor"]
+                        supported: bool = value.get('support', 0) == 1
+                        self._visitor_states[channel] = supported and value.get('alarm_state', 0) == 1
+                        self._is_doorbell_enabled[channel] = supported
+
+                elif data["cmd"] == "GetMdState":
                     self._motion_detection_states[channel] = data["value"]["state"] == 1
 
                 elif data["cmd"] == "GetAiState":
