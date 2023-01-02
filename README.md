@@ -1,16 +1,17 @@
 <h2 align="center">
-  <a href="https://reolink.com"><img src="https://raw.githubusercontent.com/JimStar/reolink_ip/master/logo.png" width="200"></a>
+  <a href="https://reolink.com"><img src="https://raw.githubusercontent.com/starkillerOG/reolink_aio/master/logo.png" width="200"></a>
   <br>
-  <i>Reolink IP NVR/cameras API package</i>
+  <i>Reolink NVR/cameras API package</i>
   <br>
 </h2>
 
 <p align="center">
-  <a href="https://pypi.org/project/reolink-ip"><img src="https://img.shields.io/pypi/dm/reolink-ip"></a>
-  <img src="https://img.shields.io/github/v/release/JimStar/reolink_ip?display_name=tag&include_prereleases&sort=semver" alt="Current version">
+  <a href="https://github.com/sponsors/starkillerOG"><img src="https://img.shields.io/static/v1?label=Sponsor&message=%E2%9D%A4&logo=GitHub&color=%23fe8e86" alt="Sponsor"></a>
+  <a href="https://pypi.org/project/reolink-aio"><img src="https://img.shields.io/pypi/dm/reolink-aio"></a>
+  <a href="https://github.com/starkillerOG/reolink_aio/releases"><img src="https://img.shields.io/github/v/release/StarkillerOG/reolink_aio?display_name=tag&include_prereleases&sort=semver" alt="Current version"></a>
 </p>
 
-The `reolink_ip` Python package allows you to integrate your [Reolink](https://www.reolink.com/) devices (NVR/cameras) in your application.
+The `reolink_aio` Python package allows you to integrate your [Reolink](https://www.reolink.com/) devices (NVR/cameras) in your application.
 
 ### Description
 
@@ -23,21 +24,24 @@ This is a package implementing Reolink IP NVR and camera API. Also it’s provid
 ### Installation
 
 ```
-pip3 install reolink-ip
+pip3 install reolink-aio
 ```
 
 or manually:
 ````
-git clone https://github.com/JimStar/reolink_ip
-cd reolink_ip/
+git clone https://github.com/StarkillerOG/reolink_aio
+cd reolink_aio/
 pip3 install .
 ````
 
 ### Usage
 
 ````
+from reolink_aio.api import Host
+import asyncio
+
 # Create a host-object (representing either a camera, or NVR with several channels)
-host = api.Host('192.168.1.10', 80, 'user', 'mypassword')
+host = Host('192.168.1.10', 80, 'user', 'mypassword')
 
 # Obtain/cache NVR or camera settings and capabilities, like model name, ports, HDD size, etc:
 await host.get_host_data()
@@ -76,7 +80,7 @@ await host.disconnect()
 
 This is an example of the usage of the API. In this case we want to retrive and print the Mac Address of the NVR.
 ````
-from reolink_ip.api import Host
+from reolink_aio.api import Host
 import asyncio
 
 async def print_mac_address():
@@ -94,3 +98,8 @@ async def print_mac_address():
 if __name__ == "__main__":
     asyncio.run(print_mac_address())
 ````
+
+### Acknowledgment
+This library is based on the work of:
+- fwestenberg: https://github.com/fwestenberg/reolink_dev
+- JimStar: https://github.com/JimStar/reolink_ip
